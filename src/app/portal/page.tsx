@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { companies, events, assignments } from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
+import { getCompanyId } from "@/lib/auth";
 import {
   Card,
   CardContent,
@@ -41,8 +41,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default async function PortalHome() {
-  const cookieStore = await cookies();
-  const companyId = cookieStore.get("tmpc_company_id")?.value;
+  const companyId = await getCompanyId();
 
   if (!companyId) {
     return (

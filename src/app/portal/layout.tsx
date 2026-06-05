@@ -1,9 +1,14 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { logoutAction } from "@/app/login/actions";
+import { UserButton } from "@clerk/nextjs";
+import { db } from "@/lib/db";
+import { companies } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { getCompanyId } from "@/lib/auth";
+import ClaimCompany from "./claim-company";
 
 const navItems = [
   { href: "/portal", label: "Home" },
+  { href: "/portal/interviewers", label: "Interviewers" },
   { href: "/portal/schedule", label: "My Schedule" },
   { href: "/portal/schedule/review", label: "Schedule Review" },
 ];
@@ -13,9 +18,18 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const companyName =
-    cookieStore.get("tmpc_company_name")?.value ?? "Company Portal";
+  const companyId = await getCompanyId();
+
+  // Signed in but not yet linked to a company — show the invite-code claim flow.
+  if (!companyId) {
+    return <ClaimCompany />;
+  }
+
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+    columns: { name: true },
+  });
+  const companyName = company?.name ?? "Company Portal";
 
   return (
     <div className="flex min-h-screen">
@@ -42,15 +56,9 @@ export default async function PortalLayout({
           ))}
         </nav>
 
-        <div className="border-t border-slate-700 p-4">
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="w-full rounded-md px-3 py-1.5 text-left text-xs text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
+        <div className="flex items-center gap-2 border-t border-slate-700 p-4">
+          <UserButton />
+          <span className="text-xs text-slate-400">Account</span>
         </div>
       </aside>
 

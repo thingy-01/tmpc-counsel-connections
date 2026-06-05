@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import {
   assignments,
@@ -6,10 +5,15 @@ import {
   timeSlots,
   eventDays,
   companies,
-  events,
+  companyInterviewers,
 } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import Link from "next/link";
+import { getCompanyId } from "@/lib/auth";
+import {
+  InterviewerSelect,
+  AssignAllControl,
+} from "./interviewer-controls";
 
 function fmt(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -19,8 +23,7 @@ function fmt(t: string) {
 }
 
 export default async function SchedulePage() {
-  const cookieStore = await cookies();
-  const companyId = cookieStore.get("tmpc_company_id")?.value;
+  const companyId = await getCompanyId();
 
   if (!companyId) {
     return (
@@ -28,12 +31,17 @@ export default async function SchedulePage() {
     );
   }
 
-  const [company, event, rows] = await Promise.all([
+  const [company, interviewers, rows] = await Promise.all([
     db.query.companies.findFirst({ where: eq(companies.id, companyId) }),
-    db.query.events.findFirst(),
+    db
+      .select({ id: companyInterviewers.id, name: companyInterviewers.name })
+      .from(companyInterviewers)
+      .where(eq(companyInterviewers.companyId, companyId))
+      .orderBy(asc(companyInterviewers.name)),
     db
       .select({
         assignmentId: assignments.id,
+        interviewerId: assignments.interviewerId,
         timeSlotId: timeSlots.id,
         startTime: timeSlots.startTime,
         endTime: timeSlots.endTime,
@@ -49,6 +57,8 @@ export default async function SchedulePage() {
         email: attorneys.email,
         phone: attorneys.phone,
         organizationType: attorneys.organizationType,
+        attorneyId: attorneys.id,
+        resumePath: attorneys.resumePath,
       })
       .from(assignments)
       .innerJoin(attorneys, eq(assignments.attorneyId, attorneys.id))
@@ -57,6 +67,8 @@ export default async function SchedulePage() {
       .where(eq(assignments.companyId, companyId))
       .orderBy(asc(timeSlots.sortOrder)),
   ]);
+
+  const hasInterviewers = interviewers.length > 0;
 
   // Group by day
   const dayMap = new Map<
@@ -98,6 +110,32 @@ export default async function SchedulePage() {
         </Link>
       </div>
 
+      {/* Interviewer helper bar */}
+      {!hasInterviewers ? (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          You haven&apos;t added any interviewers yet.{" "}
+          <Link href="/portal/interviewers" className="font-medium underline">
+            Manage interviewers
+          </Link>{" "}
+          to assign people to your slots.
+        </div>
+      ) : interviewers.length > 1 ? (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3 shadow-sm">
+          <AssignAllControl interviewers={interviewers} />
+          <Link
+            href="/portal/interviewers"
+            className="text-xs font-medium text-slate-500 underline hover:text-slate-700"
+          >
+            Manage interviewers
+          </Link>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <span className="font-medium">{interviewers[0].name}</span> is assigned
+          to all slots by default. Add another interviewer to split slots.
+        </div>
+      )}
+
       {days.length === 0 && (
         <div className="rounded-lg border bg-white p-12 text-center text-slate-500">
           No interviews scheduled yet.
@@ -122,7 +160,7 @@ export default async function SchedulePage() {
             </span>
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="border-b bg-slate-50">
                 <tr>
@@ -136,7 +174,7 @@ export default async function SchedulePage() {
                     Firm
                   </th>
                   <th className="px-4 py-2.5 text-left font-medium text-slate-600">
-                    City
+                    Interviewer
                   </th>
                   <th className="px-4 py-2.5 text-left font-medium text-slate-600">
                     Contact
@@ -151,12 +189,32 @@ export default async function SchedulePage() {
                       <span className="text-slate-400"> – </span>
                       {fmt(row.endTime)}
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {row.firstName} {row.lastName}
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-800">
+                        {row.firstName} {row.lastName}
+                      </p>
+                      {row.resumePath && (
+                        <a
+                          href={`/api/attorneys/${row.attorneyId}/resume`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-blue-600 hover:underline"
+                        >
+                          View Resume (PDF)
+                        </a>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{row.firm}</td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {row.city ?? "—"}
+                    <td className="px-4 py-3">
+                      {hasInterviewers ? (
+                        <InterviewerSelect
+                          assignmentId={row.assignmentId}
+                          value={row.interviewerId}
+                          interviewers={interviewers}
+                        />
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {row.email && (

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { companies, events, assignments } from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import CopyableCode from "./copyable-code";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
@@ -61,6 +62,8 @@ export default async function CompaniesPage({
         legalStaffCount: companies.legalStaffCount,
         status: companies.status,
         practiceAreas: companies.practiceAreas,
+        inviteCode: companies.inviteCode,
+        clerkUserId: companies.clerkUserId,
       })
       .from(companies)
       .where(eq(companies.eventId, eventId))
@@ -164,6 +167,27 @@ export default async function CompaniesPage({
                   ))}
                 </div>
               )}
+
+              {/* Invite code — companies use this to claim their portal */}
+              <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Invite code</span>
+                  {company.inviteCode ? (
+                    <CopyableCode code={company.inviteCode} />
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                </div>
+                {company.clerkUserId ? (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    Claimed
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    Unclaimed
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}

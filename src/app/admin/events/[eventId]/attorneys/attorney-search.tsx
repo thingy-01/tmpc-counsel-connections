@@ -1,6 +1,16 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  UnavailabilityPopover,
+  type UnavailabilityBlock,
+} from "@/components/attorney-picker";
+import AttorneyManageDialog, {
+  type ManageableAttorney,
+  type DayOption,
+  type SlotOption,
+} from "./attorney-manage-dialog";
 
 type Attorney = {
   id: string;
@@ -14,6 +24,9 @@ type Attorney = {
   phone: string | null;
   status: string;
   isUnavailable: boolean | null;
+  resumePath: string | null;
+  resumeOriginalName: string | null;
+  blocks: UnavailabilityBlock[];
 };
 
 function OrgTypeBadge({ orgType }: { orgType: string | null }) {
@@ -34,9 +47,20 @@ function OrgTypeBadge({ orgType }: { orgType: string | null }) {
   );
 }
 
-export default function AttorneySearch({ attorneys }: { attorneys: Attorney[] }) {
+export default function AttorneySearch({
+  attorneys,
+  eventId,
+  days,
+  slots,
+}: {
+  attorneys: Attorney[];
+  eventId: string;
+  days: DayOption[];
+  slots: SlotOption[];
+}) {
   const [query, setQuery] = useState("");
   const [orgFilter, setOrgFilter] = useState("all");
+  const [managing, setManaging] = useState<Attorney | null>(null);
 
   const orgTypes = useMemo(() => {
     const types = new Set<string>();
@@ -98,22 +122,18 @@ export default function AttorneySearch({ attorneys }: { attorneys: Attorney[] })
               <th className="px-4 py-3 text-left font-medium text-slate-600">Firm</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">City</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Org Type</th>
-              <th className="px-4 py-3 text-left font-medium text-slate-600">Practice Areas</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Resume</th>
+              <th className="px-4 py-3 text-right font-medium text-slate-600"></th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filtered.map((a) => {
-              const areas = Array.isArray(a.practiceAreas)
-                ? (a.practiceAreas as { area?: string }[])
-                    .map((p) => p.area)
-                    .filter(Boolean)
-                    .join(", ")
-                : "";
+              const isWithdrawn = a.status === "withdrawn";
               return (
                 <tr
                   key={a.id}
-                  className={`hover:bg-slate-50 ${a.isUnavailable ? "opacity-50" : ""}`}
+                  className={`hover:bg-slate-50 ${isWithdrawn ? "opacity-60" : ""}`}
                 >
                   <td className="px-4 py-2.5 font-medium text-slate-800">
                     {a.lastName}, {a.firstName}
@@ -123,23 +143,41 @@ export default function AttorneySearch({ attorneys }: { attorneys: Attorney[] })
                   <td className="px-4 py-2.5">
                     <OrgTypeBadge orgType={a.organizationType} />
                   </td>
-                  <td className="max-w-xs px-4 py-2.5 text-slate-500 truncate">
-                    {areas || "—"}
-                  </td>
                   <td className="px-4 py-2.5">
-                    {a.isUnavailable ? (
-                      <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
-                        Unavailable
-                      </span>
-                    ) : a.status === "withdrawn" ? (
+                    {isWithdrawn ? (
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                         Withdrawn
                       </span>
+                    ) : a.blocks.length > 0 ? (
+                      <UnavailabilityPopover blocks={a.blocks} />
                     ) : (
                       <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
                         Active
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {a.resumePath ? (
+                      <a
+                        href={`/api/attorneys/${a.id}/resume`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-blue-600 hover:underline"
+                      >
+                        View PDF
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setManaging(a)}
+                    >
+                      Manage
+                    </Button>
                   </td>
                 </tr>
               );
@@ -152,6 +190,17 @@ export default function AttorneySearch({ attorneys }: { attorneys: Attorney[] })
           </p>
         )}
       </div>
+
+      {managing && (
+        <AttorneyManageDialog
+          eventId={eventId}
+          attorney={managing as ManageableAttorney}
+          days={days}
+          slots={slots}
+          open={!!managing}
+          onOpenChange={(open) => !open && setManaging(null)}
+        />
+      )}
     </div>
   );
 }

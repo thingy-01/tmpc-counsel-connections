@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import {
   assignments,
@@ -6,10 +5,12 @@ import {
   timeSlots,
   eventDays,
   companies,
+  companyInterviewers,
   events,
 } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import Link from "next/link";
+import { getCompanyId } from "@/lib/auth";
 import PrintButton from "./print-button";
 
 function fmt(t: string) {
@@ -20,8 +21,7 @@ function fmt(t: string) {
 }
 
 export default async function ScheduleReviewPage() {
-  const cookieStore = await cookies();
-  const companyId = cookieStore.get("tmpc_company_id")?.value;
+  const companyId = await getCompanyId();
 
   if (!companyId) {
     return (
@@ -50,11 +50,18 @@ export default async function ScheduleReviewPage() {
         phone: attorneys.phone,
         organizationType: attorneys.organizationType,
         practiceAreas: attorneys.practiceAreas,
+        attorneyId: attorneys.id,
+        resumePath: attorneys.resumePath,
+        interviewerName: companyInterviewers.name,
       })
       .from(assignments)
       .innerJoin(attorneys, eq(assignments.attorneyId, attorneys.id))
       .innerJoin(timeSlots, eq(assignments.timeSlotId, timeSlots.id))
       .innerJoin(eventDays, eq(timeSlots.eventDayId, eventDays.id))
+      .leftJoin(
+        companyInterviewers,
+        eq(assignments.interviewerId, companyInterviewers.id)
+      )
       .where(eq(assignments.companyId, companyId))
       .orderBy(asc(timeSlots.sortOrder)),
   ]);
@@ -202,6 +209,27 @@ export default async function ScheduleReviewPage() {
                       {areas && (
                         <p className="mt-1.5 text-xs text-slate-400">{areas}</p>
                       )}
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        {row.interviewerName && (
+                          <span className="text-slate-500">
+                            Interviewer:{" "}
+                            <span className="font-medium text-slate-700">
+                              {row.interviewerName}
+                            </span>
+                          </span>
+                        )}
+                        {row.resumePath && (
+                          <a
+                            href={`/api/attorneys/${row.attorneyId}/resume`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-600 hover:underline print:hidden"
+                          >
+                            View Resume (PDF)
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

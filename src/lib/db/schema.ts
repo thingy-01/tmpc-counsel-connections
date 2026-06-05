@@ -99,9 +99,18 @@ export const attorneys = pgTable(
     partnerCount: integer("partner_count"),
     associateCount: integer("associate_count"),
     ofCounselCount: integer("of_counsel_count"),
+    // Denormalized convenience flag: true when the attorney has >= 1 row in
+    // attorney_unavailability. Maintained by the unavailability server actions.
     isUnavailable: boolean("is_unavailable").default(false),
     unavailableNote: text("unavailable_note"),
+    // Lifecycle only. "Unavailable" is NOT a status value — it is time-specific
+    // and derived from attorney_unavailability rows. withdrawn = excluded from selection.
     status: text("status").notNull().default("active"), // active | withdrawn
+    // Resume (PDF only). resumePath is relative to RESUME_STORAGE_DIR (Railway Volume).
+    resumePath: text("resume_path"),
+    resumeOriginalName: text("resume_original_name"),
+    resumeSize: integer("resume_size"),
+    resumeUploadedAt: timestamp("resume_uploaded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
@@ -157,7 +166,11 @@ export const companies = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [unique("companies_event_name_unique").on(table.eventId, table.name)]
+  (table) => [
+    unique("companies_event_name_unique").on(table.eventId, table.name),
+    // One Clerk account can claim at most one company (nullable: many unclaimed rows allowed).
+    unique("companies_clerk_user_id_unique").on(table.clerkUserId),
+  ]
 );
 
 // ============================================================

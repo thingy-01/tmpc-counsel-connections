@@ -46,3 +46,6 @@ next-env.d.ts
 # Raw data extracts
 raw_extract/
 *.zip
+
+# Local resume uploads (production uses a Railway Volume)
+/.uploads
