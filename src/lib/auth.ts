@@ -1,40 +1,41 @@
-import { cookies } from "next/headers";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
-import { like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 export type UserRole = "admin" | "company" | null;
 
-export async function getRole(): Promise<UserRole> {
-  const cookieStore = await cookies();
-  const role = cookieStore.get("tmpc_role")?.value;
-  if (role === "admin" || role === "company") return role;
-  return null;
-}
-
-export async function getCompanyId(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get("tmpc_company_id")?.value ?? null;
-}
+/** Clerk's built-in admin role key for organization members. */
+export const ADMIN_ORG_ROLE = "org:admin";
 
 /**
- * Called during login — finds JPMorgan Chase (demo company) in DB.
- * Returns its ID to store in the cookie.
+ * Resolve the current user's role from Clerk.
+ * - Member of the TMCP organization with the admin role  => "admin"
+ * - A company row claimed by this Clerk user             => "company"
+ * - Otherwise (signed out, or signed in but unclaimed)   => null
  */
-export async function findDemoCompany() {
-  const result = await db
-    .select({ id: companies.id, name: companies.name })
+export async function getRole(): Promise<UserRole> {
+  const { userId, orgRole } = await auth();
+  if (!userId) return null;
+  if (orgRole === ADMIN_ORG_ROLE) return "admin";
+
+  const rows = await db
+    .select({ id: companies.id })
     .from(companies)
-    .where(like(companies.name, "%JPMorgan%"))
+    .where(eq(companies.clerkUserId, userId))
     .limit(1);
+  return rows.length > 0 ? "company" : null;
+}
 
-  if (result.length > 0) return result[0];
+/** The company id claimed by the current Clerk user, or null. */
+export async function getCompanyId(): Promise<string | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
 
-  // Fallback: first company alphabetically
-  const fallback = await db
-    .select({ id: companies.id, name: companies.name })
+  const rows = await db
+    .select({ id: companies.id })
     .from(companies)
+    .where(eq(companies.clerkUserId, userId))
     .limit(1);
-
-  return fallback[0] ?? null;
+  return rows[0]?.id ?? null;
 }

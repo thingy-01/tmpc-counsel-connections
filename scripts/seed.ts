@@ -75,7 +75,7 @@ function parseTimeRange(rangeStr: string): { start: string; end: string } {
   }
 
   let startStr = parts[0].trim();
-  let endStr = parts[1].trim();
+  const endStr = parts[1].trim();
 
   // If start doesn't have a.m./p.m., infer from end
   if (!startStr.match(/[ap]\.?m\.?/i)) {

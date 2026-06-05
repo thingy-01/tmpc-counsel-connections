@@ -1,10 +1,7 @@
+import { redirect } from "next/navigation";
+
+// Claiming a company is handled by the portal layout (invite-code flow) when an
+// account isn't yet linked. Once linked, there's nothing to register here.
 export default function RegisterPage() {
-  return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Company Registration</h1>
-      <p className="text-slate-600">
-        Registration form coming in Phase 3.
-      </p>
-    </div>
-  );
+  redirect("/portal");
 }

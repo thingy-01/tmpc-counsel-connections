@@ -1,0 +1,172 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+
+export type UnavailabilityBlock = {
+  id: string;
+  /** Human-readable label, e.g. "Mon Oct 6 · 9:00 AM – 9:15 AM" or "Tue Oct 7 (all day)". */
+  label: string;
+  note: string | null;
+  timeSlotId: string | null;
+  eventDayId: string | null;
+};
+
+export type PickableAttorney = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  firm: string;
+  status: string; // active | withdrawn
+  blocks: UnavailabilityBlock[];
+};
+
+/**
+ * A small red badge that reveals an attorney's specific unavailable times on click.
+ * Reused in the admin roster and anywhere attorneys are listed.
+ */
+export function UnavailabilityPopover({
+  blocks,
+  label = "Unavailable",
+}: {
+  blocks: UnavailabilityBlock[];
+  label?: string;
+}) {
+  if (blocks.length === 0) return null;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200"
+        >
+          <AlertTriangle className="size-3" />
+          {label} ({blocks.length})
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72">
+        <p className="mb-2 text-xs font-semibold text-slate-700">
+          Unavailable times
+        </p>
+        <ul className="space-y-1.5">
+          {blocks.map((b) => (
+            <li key={b.id} className="text-xs text-slate-600">
+              <span className="font-medium text-slate-800">{b.label}</span>
+              {b.note && <span className="text-slate-500"> — {b.note}</span>}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Availability-aware attorney selection list.
+ *
+ * - Withdrawn attorneys are excluded entirely.
+ * - When a `slotId`/`dayId` context is given, attorneys blocked for that time are
+ *   disabled and flagged with a warning popover.
+ * - Without a slot context, blocked attorneys remain selectable but show their blocks.
+ *
+ * Reusable for any future slot-level attorney assignment UI.
+ */
+export function AttorneyPicker({
+  attorneys,
+  slotId,
+  dayId,
+  value,
+  onSelect,
+}: {
+  attorneys: PickableAttorney[];
+  slotId?: string;
+  dayId?: string;
+  value?: string | null;
+  onSelect?: (attorneyId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  const selectable = useMemo(
+    () => attorneys.filter((a) => a.status !== "withdrawn"),
+    [attorneys]
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    if (!q) return selectable;
+    return selectable.filter(
+      (a) =>
+        `${a.firstName} ${a.lastName}`.toLowerCase().includes(q) ||
+        a.firm.toLowerCase().includes(q)
+    );
+  }, [selectable, query]);
+
+  function blockedFor(a: PickableAttorney): UnavailabilityBlock[] {
+    if (!slotId && !dayId) return [];
+    return a.blocks.filter(
+      (b) =>
+        (slotId && b.timeSlotId === slotId) ||
+        (dayId && b.eventDayId === dayId)
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search attorneys…"
+        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+      />
+      <ul className="max-h-72 divide-y overflow-y-auto rounded-md border">
+        {filtered.map((a) => {
+          const conflicts = blockedFor(a);
+          const disabled = conflicts.length > 0;
+          const selected = value === a.id;
+          return (
+            <li key={a.id}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(a.id)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors",
+                  disabled
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:bg-slate-50",
+                  selected && "bg-emerald-50"
+                )}
+              >
+                <span>
+                  <span className="font-medium text-slate-800">
+                    {a.firstName} {a.lastName}
+                  </span>
+                  <span className="ml-2 text-slate-500">{a.firm}</span>
+                </span>
+                {disabled ? (
+                  <UnavailabilityPopover blocks={conflicts} label="Conflict" />
+                ) : (
+                  a.blocks.length > 0 && (
+                    <UnavailabilityPopover blocks={a.blocks} />
+                  )
+                )}
+              </button>
+            </li>
+          );
+        })}
+        {filtered.length === 0 && (
+          <li className="px-3 py-6 text-center text-sm text-slate-500">
+            No attorneys found.
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}

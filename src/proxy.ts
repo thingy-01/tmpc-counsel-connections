@@ -1,24 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  clerkMiddleware,
+  createRouteMatcher,
+} from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-export default function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const role = request.cookies.get("tmpc_role")?.value;
+const ADMIN_ORG_ROLE = "org:admin";
 
-  if (pathname.startsWith("/admin")) {
-    if (role !== "admin") {
-      return NextResponse.redirect(new URL("/login", request.url));
+const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
+const isProtectedRoute = createRouteMatcher([
+  "/portal(.*)",
+  "/api/attorneys/(.*)/resume",
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  const { userId, orgRole, redirectToSignIn } = await auth();
+
+  if (isAdminRoute(req)) {
+    if (!userId) return redirectToSignIn();
+    // Signed in but not a TMCP admin — send them to the company portal.
+    if (orgRole !== ADMIN_ORG_ROLE) {
+      return NextResponse.redirect(new URL("/portal", req.url));
     }
   }
 
-  if (pathname.startsWith("/portal")) {
-    if (role !== "company") {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
+  if (isProtectedRoute(req)) {
+    if (!userId) return redirectToSignIn();
   }
-
-  return NextResponse.next();
-}
+});
 
 export const config = {
-  matcher: ["/admin/:path*", "/portal/:path*"],
+  matcher: [
+    // Run on everything except Next internals and static files…
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // …always run for API routes.
+    "/(api|trpc)(.*)",
+  ],
 };

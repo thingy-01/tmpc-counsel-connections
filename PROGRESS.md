@@ -55,6 +55,45 @@
 
 ---
 
+## Feature Round 2: Interviewers, Availability, Resumes, Real Auth ✅
+
+### Completed
+- [x] **Per-slot interviewer assignment (company portal)**
+  - Interviewer roster CRUD at `/portal/interviewers`
+  - Per-slot interviewer dropdown on `/portal/schedule` (auto-saves)
+  - A lone interviewer is auto-assigned to every slot; multi-interviewer
+    companies get a "Apply to all" bulk control
+  - Interviewer name shown on the printable Schedule Review
+- [x] **Attorney availability blocking + status (admin)**
+  - Add/remove time-specific unavailability (whole-day or single-slot, with a
+    note like "panel duty") via the per-attorney "Manage" dialog
+  - Withdraw / reactivate attorneys; withdrawn are excluded from all selection
+  - Roster status shows an "Unavailable (N)" popover listing the blocked times
+  - Reusable availability-aware `AttorneyPicker` component for future slot pickers
+- [x] **Resume integration (PDF only)**
+  - Upload/replace/remove PDF per attorney (admin), strict `application/pdf` +
+    `%PDF` magic-byte validation, 10 MB cap
+  - Stored on a Railway Volume via `src/lib/storage.ts` (`RESUME_STORAGE_DIR`)
+  - Served (auth-guarded) at `GET /api/attorneys/[id]/resume`
+  - "View Resume" links in the admin roster and portal schedule/review
+- [x] **Clerk auth re-enabled for real users**
+  - `ClerkProvider`, `clerkMiddleware`, real `<SignIn>`/`<SignUp>` pages,
+    `<UserButton>` in both layouts (password gate removed)
+  - Admins = TMCP Clerk **Organization** members with the `org:admin` role
+  - Companies = **invite-code claim** at `/portal` linking `companies.clerkUserId`
+  - `getRole()`/`getCompanyId()` now resolve from Clerk (same signatures)
+
+### Setup required before deploy
+- [ ] Run `npx drizzle-kit push` to apply the additive schema changes
+  (attorney resume columns; unique index on `companies.clerk_user_id`)
+- [ ] Set `RESUME_STORAGE_DIR` and attach a **Railway Volume** mounted at `/data`
+  (without a volume, uploaded PDFs are wiped on redeploy)
+- [ ] In the Clerk dashboard: enable **Organizations**, create the TMCP org, and
+  assign staff the `org:admin` role; set production Clerk keys in env
+- [ ] Set `NEXT_PUBLIC_CLERK_SIGN_IN/UP_FALLBACK_REDIRECT_URL=/portal`
+
+---
+
 ## Phase 2: Admin — Event & Data Management (Pending)
 - [ ] Event CRUD
 - [ ] Day configuration with slot generation

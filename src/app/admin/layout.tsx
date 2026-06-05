@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { UserButton } from "@clerk/nextjs";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
-import { logoutAction } from "@/app/login/actions";
 
 async function getEventId() {
   const result = await db.select({ id: events.id }).from(events).limit(1);
@@ -52,15 +52,9 @@ export default async function AdminLayout({
           ))}
         </nav>
 
-        <div className="border-t border-slate-700 p-4">
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="w-full rounded-md px-3 py-1.5 text-left text-xs text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
+        <div className="flex items-center gap-2 border-t border-slate-700 p-4">
+          <UserButton />
+          <span className="text-xs text-slate-400">TMCP Staff</span>
         </div>
       </aside>
 
