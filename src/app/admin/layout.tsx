@@ -1,10 +1,16 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import AccountButton from "@/components/account-button";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 
+import { desc } from "drizzle-orm";
+
 async function getEventId() {
-  const result = await db.select({ id: events.id }).from(events).limit(1);
+  const result = await db
+    .select({ id: events.id })
+    .from(events)
+    .orderBy(desc(events.startDate))
+    .limit(1);
   return result[0]?.id ?? null;
 }
 
@@ -17,14 +23,17 @@ export default async function AdminLayout({
 
   const navItems = [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/events", label: "Events" },
     ...(eventId
       ? [
+          { href: `/admin/events/${eventId}/days`, label: "Days & Slots" },
           { href: `/admin/events/${eventId}/attorneys`, label: "Attorneys" },
           { href: `/admin/events/${eventId}/companies`, label: "Companies" },
           {
             href: `/admin/events/${eventId}/assignments`,
             label: "Master Schedule",
           },
+          { href: `/admin/events/${eventId}/settings`, label: "Settings" },
         ]
       : []),
   ];
@@ -53,7 +62,7 @@ export default async function AdminLayout({
         </nav>
 
         <div className="flex items-center gap-2 border-t border-slate-700 p-4">
-          <UserButton />
+          <AccountButton />
           <span className="text-xs text-slate-400">TMCP Staff</span>
         </div>
       </aside>

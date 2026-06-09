@@ -17,15 +17,24 @@ import {
   reactivateAttorney,
   uploadResume,
   removeResume,
+  deleteAttorney,
 } from "./actions";
+import { EditAttorneySection } from "./attorney-form";
 
 export type ManageableAttorney = {
   id: string;
   firstName: string;
   lastName: string;
+  email: string;
+  phone: string | null;
+  firm: string;
+  city: string | null;
+  organizationType: string | null;
+  practiceAreas: unknown;
   status: string;
   resumePath: string | null;
   resumeOriginalName: string | null;
+  assignmentCount: number;
   blocks: UnavailabilityBlock[];
 };
 
@@ -69,11 +78,24 @@ export default function AttorneyManageDialog({
             {attorney.firstName} {attorney.lastName}
           </DialogTitle>
           <DialogDescription>
-            Manage availability, status, and resume.
+            Manage details, availability, status, and resume.{" "}
+            <a
+              href={`/admin/events/${eventId}/attorneys/${attorney.id}/schedule`}
+              className="font-medium text-blue-600 hover:underline"
+            >
+              View schedule ({attorney.assignmentCount} interview
+              {attorney.assignmentCount === 1 ? "" : "s"})
+            </a>
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+          {/* Details */}
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">Details</h3>
+            <EditAttorneySection eventId={eventId} attorney={attorney} />
+          </section>
+
           {/* Status */}
           <section>
             <h3 className="mb-2 text-sm font-semibold text-slate-700">Status</h3>
@@ -254,6 +276,36 @@ export default function AttorneyManageDialog({
               </Button>
             </form>
             <p className="mt-1 text-xs text-slate-400">PDF only, up to 10 MB.</p>
+          </section>
+
+          {/* Delete */}
+          <section className="rounded-md border border-red-200 p-3">
+            <h3 className="mb-1 text-sm font-semibold text-red-700">
+              Remove attorney
+            </h3>
+            <p className="mb-2 text-xs text-slate-500">
+              Deletes the attorney, their availability blocks, resume, and{" "}
+              {attorney.assignmentCount} booked interview(s). To keep history,
+              use Withdraw instead.
+            </p>
+            <form
+              action={deleteAttorney}
+              onSubmit={(e) => {
+                if (
+                  !confirm(
+                    `Permanently delete ${attorney.firstName} ${attorney.lastName} and their ${attorney.assignmentCount} booked interview(s)?`
+                  )
+                ) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="attorneyId" value={attorney.id} />
+              <Button type="submit" variant="destructive" size="sm">
+                Delete attorney
+              </Button>
+            </form>
           </section>
         </div>
       </DialogContent>

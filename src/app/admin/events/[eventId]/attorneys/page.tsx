@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import {
+  assignments,
   attorneys,
   attorneyUnavailability,
   eventDays,
@@ -7,9 +8,10 @@ import {
   timeSlots,
 } from "@/lib/db/schema";
 import { alias } from "drizzle-orm/pg-core";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, count } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import AttorneySearch from "./attorney-search";
+import { AddAttorneyButton } from "./attorney-form";
 import type { UnavailabilityBlock } from "@/components/attorney-picker";
 
 function fmt(t: string) {
@@ -30,7 +32,7 @@ export default async function AttorneysPage({
   const slotDay = alias(eventDays, "slot_day");
   const dayDirect = alias(eventDays, "day_direct");
 
-  const [event, attorneyList, days, slotRows, blockRows] = await Promise.all([
+  const [event, attorneyList, days, slotRows, blockRows, assignmentCounts] = await Promise.all([
     db.query.events.findFirst({ where: eq(events.id, eventId) }),
     db
       .select({
@@ -87,6 +89,12 @@ export default async function AttorneysPage({
       .leftJoin(slotDay, eq(timeSlots.eventDayId, slotDay.id))
       .leftJoin(dayDirect, eq(attorneyUnavailability.eventDayId, dayDirect.id))
       .where(eq(attorneys.eventId, eventId)),
+    db
+      .select({ attorneyId: assignments.attorneyId, count: count() })
+      .from(assignments)
+      .innerJoin(attorneys, eq(assignments.attorneyId, attorneys.id))
+      .where(eq(attorneys.eventId, eventId))
+      .groupBy(assignments.attorneyId),
   ]);
 
   if (!event) notFound();
@@ -110,9 +118,14 @@ export default async function AttorneysPage({
     blocksByAttorney.set(b.attorneyId, list);
   }
 
+  const countByAttorney = new Map(
+    assignmentCounts.map((r) => [r.attorneyId, r.count])
+  );
+
   const enriched = attorneyList.map((a) => ({
     ...a,
     blocks: blocksByAttorney.get(a.id) ?? [],
+    assignmentCount: countByAttorney.get(a.id) ?? 0,
   }));
 
   const slots = slotRows.map((s) => ({
@@ -124,11 +137,14 @@ export default async function AttorneysPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Attorney Roster</h1>
-        <p className="mt-1 text-slate-500">
-          {event.name} · {attorneyList.length} attorneys registered
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Attorney Roster</h1>
+          <p className="mt-1 text-slate-500">
+            {event.name} · {attorneyList.length} attorneys registered
+          </p>
+        </div>
+        <AddAttorneyButton eventId={eventId} />
       </div>
 
       <AttorneySearch

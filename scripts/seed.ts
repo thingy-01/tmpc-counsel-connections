@@ -14,8 +14,10 @@ import * as fs from "fs";
 const envPath = fs.existsSync(".env.local") ? ".env.local" : ".env";
 dotenv.config({ path: envPath });
 import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { eq, and } from "drizzle-orm";
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import * as path from "path";
 import * as schema from "../src/lib/db/schema";
@@ -30,8 +32,12 @@ if (!DATABASE_URL || DATABASE_URL.includes("placeholder") || DATABASE_URL.includ
   process.exit(1);
 }
 
-const sql = neon(DATABASE_URL);
-const db = drizzle(sql, { schema });
+// Match src/lib/db: Neon HTTP driver for neon.tech, node-postgres otherwise.
+const db = DATABASE_URL.includes("neon.tech")
+  ? drizzleNeon(neon(DATABASE_URL), { schema })
+  : (drizzlePg(new Pool({ connectionString: DATABASE_URL }), {
+      schema,
+    }) as unknown as ReturnType<typeof drizzleNeon<typeof schema>>);
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 

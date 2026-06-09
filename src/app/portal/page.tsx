@@ -10,7 +10,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
@@ -49,14 +48,18 @@ export default async function PortalHome() {
     );
   }
 
-  const [company, [{ interviewCount }], event] = await Promise.all([
+  const [company, [{ interviewCount }]] = await Promise.all([
     db.query.companies.findFirst({ where: eq(companies.id, companyId) }),
     db
       .select({ interviewCount: count() })
       .from(assignments)
       .where(eq(assignments.companyId, companyId)),
-    db.query.events.findFirst(),
   ]);
+
+  // The event this company belongs to (not just any event in the DB).
+  const event = company
+    ? await db.query.events.findFirst({ where: eq(events.id, company.eventId) })
+    : null;
 
   if (!company || !event) {
     return <div className="text-slate-500">Company not found.</div>;
