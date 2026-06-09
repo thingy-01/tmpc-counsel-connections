@@ -29,9 +29,8 @@ export default async function ScheduleReviewPage() {
     );
   }
 
-  const [company, event, rows] = await Promise.all([
+  const [company, rows] = await Promise.all([
     db.query.companies.findFirst({ where: eq(companies.id, companyId) }),
-    db.query.events.findFirst(),
     db
       .select({
         assignmentId: assignments.id,
@@ -63,8 +62,13 @@ export default async function ScheduleReviewPage() {
         eq(assignments.interviewerId, companyInterviewers.id)
       )
       .where(eq(assignments.companyId, companyId))
-      .orderBy(asc(timeSlots.sortOrder)),
+      .orderBy(asc(eventDays.date), asc(timeSlots.sortOrder)),
   ]);
+
+  // The event this company belongs to (not just any event in the DB).
+  const event = company
+    ? await db.query.events.findFirst({ where: eq(events.id, company.eventId) })
+    : null;
 
   // Group by day
   const dayMap = new Map<
@@ -158,7 +162,7 @@ export default async function ScheduleReviewPage() {
             </div>
 
             <div className="space-y-3">
-              {day.interviews.map((row, i) => {
+              {day.interviews.map((row) => {
                 const areas = Array.isArray(row.practiceAreas)
                   ? (row.practiceAreas as { area?: string }[])
                       .map((p) => p.area)
@@ -176,7 +180,11 @@ export default async function ScheduleReviewPage() {
                       <p className="font-bold text-slate-800">{fmt(row.startTime)}</p>
                       <p className="text-xs text-slate-400">—</p>
                       <p className="text-sm text-slate-600">{fmt(row.endTime)}</p>
-                      <p className="mt-1 text-xs text-slate-400">15 min</p>
+                      {event?.slotDuration && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          {event.slotDuration} min
+                        </p>
+                      )}
                     </div>
 
                     {/* Attorney details */}

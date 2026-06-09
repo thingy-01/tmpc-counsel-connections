@@ -1,13 +1,12 @@
 import { db } from "@/lib/db";
 import {
-  events,
   attorneys,
   companies,
   assignments,
   timeSlots,
   eventDays,
 } from "@/lib/db/schema";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import {
   Card,
   CardContent,
@@ -15,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 function StatusBadge({ status }: { status: string }) {
@@ -34,13 +32,21 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default async function AdminDashboard() {
-  // Load the primary event
-  const event = await db.query.events.findFirst();
+  // Load the most recent event
+  const event = await db.query.events.findFirst({
+    orderBy: (events, { desc }) => [desc(events.startDate)],
+  });
 
   if (!event) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-500">
-        No events found. Run the seed script to populate data.
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-500">
+        <p>No events yet.</p>
+        <Link
+          href="/admin/events"
+          className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+        >
+          Create your first event
+        </Link>
       </div>
     );
   }

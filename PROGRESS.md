@@ -94,24 +94,47 @@
 
 ---
 
-## Phase 2: Admin — Event & Data Management (Pending)
-- [ ] Event CRUD
-- [ ] Day configuration with slot generation
-- [ ] Attorney roster: CSV upload, list, edit, unavailability
-- [ ] Company management: invite, list, status tracking
+## Phase 2: Admin — Full Event & Data Management ✅
 
-## Phase 3: Company Portal — Registration & Scheduling (Pending)
-- [ ] Invite flow
-- [ ] Registration form
-- [ ] Interviewer management
-- [ ] Time slot selection grid
-- [ ] Attorney selection per slot
-- [ ] Schedule review page
+- [x] **Event CRUD** (`/admin/events` + per-event `Settings`)
+  - Create events (name, dates, location, interview length, status)
+  - Edit any field later; status: draft → open → closed
+  - Danger Zone (typed-confirmation): clear all assignments, or delete the
+    event and everything in it
+- [x] **Days & time slots** (`/admin/events/[id]/days`)
+  - Add/edit/delete event days (date, auto label, in-person/virtual, hours)
+  - Breaks per day (e.g. lunch) — slots are never generated inside a break
+  - One-click slot generation from the day's hours in `slotDuration` steps;
+    **regenerate** any time after changing hours/breaks/interview length:
+    missing slots are created, empty off-grid slots are removed, and slots
+    with booked interviews are always kept (and reported)
+  - One-off manual slots and per-slot delete (with booked-interview warning)
+- [x] **Company management** — add/edit/delete companies, set status,
+  regenerate invite codes, unlink a claimed portal account
+- [x] **Attorney management** — add/edit/delete attorneys (plus the existing
+  withdraw/availability/resume tools); per-attorney printable schedule at
+  `/admin/events/[id]/attorneys/[attorneyId]/schedule` (for interviewees)
+- [x] **Editable Master Schedule** (`/admin/events/[id]/assignments`)
+  - Click any company × time cell to schedule, change, or remove an interview
+  - Attorney picker with live filter; attorneys already booked in that slot
+    are disabled; unavailability blocks show a warning (admin can override);
+    withdrawn attorneys are excluded from selection but still display on
+    their existing interviews
+  - Friendly conflict errors backed by DB unique constraints; notes per
+    interview; changes appear in company portals immediately
+- [x] **Wipe seeded data** — `npx tsx scripts/wipe.ts --yes` (all events,
+  cascading), or per-event via Settings → Danger Zone in the UI
+- [x] **Local development without Clerk/Neon**
+  - `DEV_AUTH=admin|company[:id]` env bypass (disabled in production builds)
+  - `DATABASE_URL` pointing at any local Postgres uses the node-postgres
+    driver automatically (Neon HTTP driver for `*.neon.tech` URLs)
+  - Dev-only `/api/dev-harness` route used by the E2E test scenario
+- [x] **Tested end-to-end locally** — 56-check admin scenario (event → days →
+  breaks → slots → companies → attorneys → blocks → assignments → resume →
+  destructive ops) plus the company-portal interviewer/schedule flows
 
-## Phase 4: Admin Assignments & Export (Pending)
-- [ ] Master assignment grid view
-- [ ] Manual assignment editor
-- [ ] PDF export
+## Phase 4: Export (Pending)
+- [ ] PDF export of the master grid
 - [ ] CSV/Excel export
 
 ## Phase 5: Polish & Deploy (Pending)

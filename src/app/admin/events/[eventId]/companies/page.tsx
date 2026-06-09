@@ -3,6 +3,11 @@ import { companies, events, assignments } from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import CopyableCode from "./copyable-code";
+import {
+  AddCompanyButton,
+  ManageCompanyButton,
+  type EditableCompany,
+} from "./company-manage";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
@@ -52,8 +57,10 @@ export default async function CompaniesPage({
       .select({
         id: companies.id,
         name: companies.name,
+        website: companies.website,
         city: companies.city,
         state: companies.state,
+        description: companies.description,
         contactName: companies.contactName,
         contactTitle: companies.contactTitle,
         contactEmail: companies.contactEmail,
@@ -87,11 +94,14 @@ export default async function CompaniesPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Companies</h1>
-        <p className="mt-1 text-slate-500">
-          {event.name} · {companyList.length} participating corporations
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Companies</h1>
+          <p className="mt-1 text-slate-500">
+            {event.name} · {companyList.length} participating corporations
+          </p>
+        </div>
+        <AddCompanyButton eventId={eventId} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -115,7 +125,18 @@ export default async function CompaniesPage({
                     </p>
                   )}
                 </div>
-                <StatusBadge status={company.status} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={company.status} />
+                  <ManageCompanyButton
+                    eventId={eventId}
+                    company={
+                      {
+                        ...company,
+                        assignmentCount: interviewCount,
+                      } as EditableCompany
+                    }
+                  />
+                </div>
               </div>
 
               {/* Contact */}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import AccountButton from "@/components/account-button";
 import { db } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -57,7 +57,7 @@ export default async function PortalLayout({
         </nav>
 
         <div className="flex items-center gap-2 border-t border-slate-700 p-4">
-          <UserButton />
+          <AccountButton />
           <span className="text-xs text-slate-400">Account</span>
         </div>
       </aside>

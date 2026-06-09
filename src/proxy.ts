@@ -3,6 +3,7 @@ import {
   createRouteMatcher,
 } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { getDevAuth } from "@/lib/dev-auth";
 
 const ADMIN_ORG_ROLE = "org:admin";
 
@@ -12,7 +13,7 @@ const isProtectedRoute = createRouteMatcher([
   "/api/attorneys/(.*)/resume",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerk = clerkMiddleware(async (auth, req) => {
   const { userId, orgRole, redirectToSignIn } = await auth();
 
   if (isAdminRoute(req)) {
@@ -27,6 +28,11 @@ export default clerkMiddleware(async (auth, req) => {
     if (!userId) return redirectToSignIn();
   }
 });
+
+// Local dev with DEV_AUTH set: skip Clerk entirely (no keys needed).
+const passthrough = () => NextResponse.next();
+
+export default getDevAuth() ? passthrough : clerk;
 
 export const config = {
   matcher: [

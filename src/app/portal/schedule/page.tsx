@@ -65,7 +65,7 @@ export default async function SchedulePage() {
       .innerJoin(timeSlots, eq(assignments.timeSlotId, timeSlots.id))
       .innerJoin(eventDays, eq(timeSlots.eventDayId, eventDays.id))
       .where(eq(assignments.companyId, companyId))
-      .orderBy(asc(timeSlots.sortOrder)),
+      .orderBy(asc(eventDays.date), asc(timeSlots.sortOrder)),
   ]);
 
   const hasInterviewers = interviewers.length > 0;
