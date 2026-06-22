@@ -8,10 +8,10 @@ export default function SignInPage() {
           TMCP Counsel Connections
         </h1>
         <p className="mt-2 text-slate-600">
-          Texas Minority Counsel Program — Attorney Interview Scheduling
+          TMCP Staff Sign In
         </p>
       </div>
-      <SignIn />
+      <SignIn forceRedirectUrl="/admin" signUpUrl="/sign-up" />
     </div>
   );
 }

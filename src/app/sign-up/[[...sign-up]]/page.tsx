@@ -8,10 +8,10 @@ export default function SignUpPage() {
           TMCP Counsel Connections
         </h1>
         <p className="mt-2 text-slate-600">
-          Create your account to claim your company portal.
+          TMCP Staff — create your account
         </p>
       </div>
-      <SignUp />
+      <SignUp forceRedirectUrl="/admin" signInUrl="/sign-in" />
     </div>
   );
 }
