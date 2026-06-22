@@ -8,6 +8,7 @@ import PortalLogout from "./portal-logout";
 
 const navItems = [
   { href: "/portal", label: "Home" },
+  { href: "/portal/profile", label: "Company Profile" },
   { href: "/portal/interviewers", label: "Interviewers" },
   { href: "/portal/schedule", label: "My Schedule" },
   { href: "/portal/schedule/review", label: "Schedule Review" },

@@ -4,6 +4,8 @@ import { eq, asc } from "drizzle-orm";
 import { getCompanyId } from "@/lib/auth";
 import InterviewersManager from "./interviewers-manager";
 
+export const dynamic = "force-dynamic";
+
 export default async function InterviewersPage() {
   const companyId = await getCompanyId();
 

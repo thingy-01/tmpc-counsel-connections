@@ -20,6 +20,8 @@ function fmt(t: string) {
   return `${hour}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ScheduleReviewPage() {
   const companyId = await getCompanyId();
 
