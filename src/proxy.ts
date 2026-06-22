@@ -8,24 +8,18 @@ import { getDevAuth } from "@/lib/dev-auth";
 const ADMIN_ORG_ROLE = "org:admin";
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
-const isProtectedRoute = createRouteMatcher([
-  "/portal(.*)",
-  "/api/attorneys/(.*)/resume",
-]);
 
 const clerk = clerkMiddleware(async (auth, req) => {
-  const { userId, orgRole, redirectToSignIn } = await auth();
-
+  // Only /admin requires Clerk. The company portal and the resume route use the
+  // email-free invite-code session and are gated in-app (see src/lib/auth.ts),
+  // so we never force a Clerk sign-in (and its email step) on them.
   if (isAdminRoute(req)) {
+    const { userId, orgRole, redirectToSignIn } = await auth();
     if (!userId) return redirectToSignIn();
     // Signed in but not a TMCP admin — send them to the company portal.
     if (orgRole !== ADMIN_ORG_ROLE) {
       return NextResponse.redirect(new URL("/portal", req.url));
     }
-  }
-
-  if (isProtectedRoute(req)) {
-    if (!userId) return redirectToSignIn();
   }
 });
 

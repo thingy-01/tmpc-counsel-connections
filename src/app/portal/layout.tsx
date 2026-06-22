@@ -1,10 +1,10 @@
 import Link from "next/link";
-import AccountButton from "@/components/account-button";
 import { db } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getCompanyId } from "@/lib/auth";
-import ClaimCompany from "./claim-company";
+import CompanyLogin from "./claim-company";
+import PortalLogout from "./portal-logout";
 
 const navItems = [
   { href: "/portal", label: "Home" },
@@ -20,9 +20,9 @@ export default async function PortalLayout({
 }) {
   const companyId = await getCompanyId();
 
-  // Signed in but not yet linked to a company — show the invite-code claim flow.
+  // Not logged in yet — show the email-free invite-code sign-in.
   if (!companyId) {
-    return <ClaimCompany />;
+    return <CompanyLogin />;
   }
 
   const company = await db.query.companies.findFirst({
@@ -56,9 +56,9 @@ export default async function PortalLayout({
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 border-t border-slate-700 p-4">
-          <AccountButton />
-          <span className="text-xs text-slate-400">Account</span>
+        <div className="flex items-center justify-between gap-2 border-t border-slate-700 p-4">
+          <span className="text-xs text-slate-400">Signed in</span>
+          <PortalLogout />
         </div>
       </aside>
 
