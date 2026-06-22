@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     selections_complete: {
@@ -83,6 +85,25 @@ export default async function PortalHome() {
         </div>
         <p className="mt-1 text-slate-500">Counsel Connections Participant</p>
       </div>
+
+      {/* Prompt new companies to complete their profile. */}
+      {(!company.contactName || !company.contactEmail) && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-900">
+            Welcome! Please complete your company profile.
+          </p>
+          <p className="mt-0.5 text-sm text-amber-800">
+            Add your contact details, practice areas, and other information so
+            TMCP and your matched attorneys have what they need.
+          </p>
+          <Link
+            href="/portal/profile"
+            className="mt-3 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"
+          >
+            Complete profile →
+          </Link>
+        </div>
+      )}
 
       {/* Event info */}
       <Card className="mb-6 bg-white">

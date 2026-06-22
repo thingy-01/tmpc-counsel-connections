@@ -9,6 +9,7 @@ import * as companyActions from "@/app/admin/events/[eventId]/companies/actions"
 import * as attorneyActions from "@/app/admin/events/[eventId]/attorneys/actions";
 import * as assignmentActions from "@/app/admin/events/[eventId]/assignments/actions";
 import * as portalActions from "@/app/portal/actions";
+import * as profileActions from "@/app/portal/profile/actions";
 import * as interviewerActions from "@/app/portal/interviewers/actions";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,6 +44,7 @@ const registry: Record<string, (...args: any[]) => Promise<unknown>> = {
   saveAssignment: (fd) => assignmentActions.saveAssignment({ ok: false }, fd),
   deleteAssignment: (fd) => assignmentActions.deleteAssignment({ ok: false }, fd),
   loginCompany: (fd) => portalActions.loginCompany({ ok: false }, fd),
+  updateMyCompany: (fd) => profileActions.updateMyCompany({ ok: false }, fd),
   addInterviewer: (fd) => interviewerActions.addInterviewer(fd),
   updateInterviewer: (fd) => interviewerActions.updateInterviewer(fd),
   deleteInterviewer: (fd) => interviewerActions.deleteInterviewer(fd),

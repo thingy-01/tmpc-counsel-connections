@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import CompanyFields from "@/components/company-fields";
 import {
   createCompany,
   deleteCompany,
@@ -43,92 +44,6 @@ const inputClass =
 
 const idle: ActionResult = { ok: false };
 
-function CompanyFields({ company }: { company?: EditableCompany }) {
-  const areas = Array.isArray(company?.practiceAreas)
-    ? (company!.practiceAreas as string[]).join(", ")
-    : "";
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="sm:col-span-2">
-        <label className="mb-1 block text-xs font-medium text-slate-600">
-          Company name *
-        </label>
-        <input name="name" required defaultValue={company?.name ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">City</label>
-        <input name="city" defaultValue={company?.city ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">State</label>
-        <input name="state" defaultValue={company?.state ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Website</label>
-        <input name="website" defaultValue={company?.website ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">
-          Legal staff count
-        </label>
-        <input
-          type="number"
-          name="legalStaffCount"
-          min={0}
-          defaultValue={company?.legalStaffCount ?? ""}
-          className={inputClass}
-        />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">
-          Outside counsel need
-        </label>
-        <select
-          name="outsideCounselNeed"
-          defaultValue={company?.outsideCounselNeed ?? ""}
-          className={inputClass}
-        >
-          <option value="">Not set</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">
-          Practice areas (comma-separated)
-        </label>
-        <input
-          name="practiceAreas"
-          defaultValue={areas}
-          placeholder="Litigation, M&A, IP"
-          className={inputClass}
-        />
-      </div>
-      <div className="sm:col-span-2">
-        <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
-        <input name="description" defaultValue={company?.description ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact name</label>
-        <input name="contactName" defaultValue={company?.contactName ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact title</label>
-        <input name="contactTitle" defaultValue={company?.contactTitle ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact email</label>
-        <input type="email" name="contactEmail" defaultValue={company?.contactEmail ?? ""} className={inputClass} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact phone</label>
-        <input name="contactPhone" defaultValue={company?.contactPhone ?? ""} className={inputClass} />
-      </div>
-    </div>
-  );
-}
-
 export function AddCompanyButton({ eventId }: { eventId: string }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(
@@ -146,17 +61,23 @@ export function AddCompanyButton({ eventId }: { eventId: string }) {
         Add company
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Company</DialogTitle>
             <DialogDescription>
-              An invite code is generated automatically — share it with the
-              company so they can claim their portal.
+              Just the name is needed. An invite code is generated automatically
+              — share it with the company, and they fill in the rest of their
+              details when they sign in.
             </DialogDescription>
           </DialogHeader>
           <form action={formAction} className="space-y-4">
             <input type="hidden" name="eventId" value={eventId} />
-            <CompanyFields />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Company name *
+              </label>
+              <input name="name" required autoFocus className={inputClass} />
+            </div>
             {state.error && <p className="text-sm text-red-600">{state.error}</p>}
             <Button type="submit" disabled={pending}>
               {pending ? "Adding…" : "Add company"}

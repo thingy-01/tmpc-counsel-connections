@@ -25,6 +25,8 @@ function revalidate(eventId: string) {
   revalidatePath(`/admin/events/${eventId}/days`);
   revalidatePath(`/admin/events/${eventId}/assignments`);
   revalidatePath("/admin");
+  // Day/slot changes alter the times shown on company schedules.
+  revalidatePath("/portal", "layout");
 }
 
 function normalizeTime(t: string): string {

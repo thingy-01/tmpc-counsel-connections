@@ -65,6 +65,7 @@ export async function updateEvent(
     .set({ ...parsed.fields!, updatedAt: new Date() })
     .where(eq(events.id, eventId));
   revalidatePath("/admin", "layout");
+  revalidatePath("/portal", "layout");
   return { ok: true };
 }
 
@@ -90,4 +91,5 @@ export async function clearAssignments(formData: FormData): Promise<void> {
     await db.delete(assignments).where(inArray(assignments.companyId, ids));
   }
   revalidatePath("/admin", "layout");
+  revalidatePath("/portal", "layout");
 }
