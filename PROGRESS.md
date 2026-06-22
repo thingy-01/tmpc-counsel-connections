@@ -142,3 +142,24 @@
 - [ ] Loading states
 - [ ] Responsive design
 - [ ] Production deployment
+
+## Auth fix: email-free company login ✅
+
+**Problem:** every login went through Clerk, which authenticates by emailing a
+verification code. Those codes don't reach many corporate/legal mail servers
+(e.g. texasbar.com), so companies/interviewees literally could not log in.
+
+**Fix:** companies now sign in with the **invite code** TMCP issues them — no
+email, no account. The code is verified server-side and an HMAC-signed,
+httpOnly session cookie is set (`src/lib/session.ts`). Clerk is kept for TMCP
+staff/admins only (their own email login already works).
+
+- Company login at `/portal` (invite code) → signed `tmcp_company` cookie
+- Landing page `/` is a chooser: Company/Interviewee vs TMCP Staff
+- `getRole()`/`getCompanyId()` resolve from the cookie first, then fall back to
+  a legacy Clerk-claimed company (backward compatible)
+- Middleware no longer forces a Clerk sign-in on `/portal` or the resume route;
+  those are gated in-app. Only `/admin` requires Clerk.
+- Cookie is signed with `SESSION_SECRET` (falls back to `CLERK_SECRET_KEY`)
+- Admin "Companies" page now shows "Signed in / Not signed in" (from status)
+  instead of the old Clerk "Claimed" badge

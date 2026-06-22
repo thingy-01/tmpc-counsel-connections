@@ -42,7 +42,7 @@ const registry: Record<string, (...args: any[]) => Promise<unknown>> = {
   removeResume: (fd) => attorneyActions.removeResume(fd),
   saveAssignment: (fd) => assignmentActions.saveAssignment({ ok: false }, fd),
   deleteAssignment: (fd) => assignmentActions.deleteAssignment({ ok: false }, fd),
-  claimCompany: (fd) => portalActions.claimCompany({ ok: false }, fd),
+  loginCompany: (fd) => portalActions.loginCompany({ ok: false }, fd),
   addInterviewer: (fd) => interviewerActions.addInterviewer(fd),
   updateInterviewer: (fd) => interviewerActions.updateInterviewer(fd),
   deleteInterviewer: (fd) => interviewerActions.deleteInterviewer(fd),

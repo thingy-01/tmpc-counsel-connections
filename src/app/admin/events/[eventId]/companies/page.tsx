@@ -189,7 +189,7 @@ export default async function CompaniesPage({
                 </div>
               )}
 
-              {/* Invite code — companies use this to claim their portal */}
+              {/* Invite code — companies sign in to their portal with this */}
               <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">Invite code</span>
@@ -199,13 +199,13 @@ export default async function CompaniesPage({
                     <span className="text-xs text-slate-400">—</span>
                   )}
                 </div>
-                {company.clerkUserId ? (
-                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                    Claimed
+                {company.status === "invited" ? (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    Not signed in
                   </span>
                 ) : (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                    Unclaimed
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    Signed in
                   </span>
                 )}
               </div>

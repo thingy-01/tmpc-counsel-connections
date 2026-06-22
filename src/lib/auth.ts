@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
 import { asc, eq } from "drizzle-orm";
 import { getDevAuth } from "@/lib/dev-auth";
+import { getCompanySessionId } from "@/lib/session";
 
 export type UserRole = "admin" | "company" | null;
 
@@ -10,28 +11,41 @@ export type UserRole = "admin" | "company" | null;
 export const ADMIN_ORG_ROLE = "org:admin";
 
 /**
- * Resolve the current user's role from Clerk.
- * - Member of the TMCP organization with the admin role  => "admin"
- * - A company row claimed by this Clerk user             => "company"
- * - Otherwise (signed out, or signed in but unclaimed)   => null
+ * Clerk's auth(), but never throws — returns nulls if Clerk isn't configured
+ * or its middleware didn't run (e.g. the company portal, which uses an
+ * email-free invite-code session instead of Clerk).
+ */
+async function safeClerkAuth(): Promise<{
+  userId: string | null;
+  orgRole: string | null;
+}> {
+  try {
+    const { userId, orgRole } = await auth();
+    return { userId: userId ?? null, orgRole: orgRole ?? null };
+  } catch {
+    return { userId: null, orgRole: null };
+  }
+}
+
+/**
+ * Resolve the current user's role.
+ * - TMCP Clerk organization member with the admin role  => "admin"
+ * - A valid email-free company session (invite code)    => "company"
+ * - A company row claimed by this Clerk user            => "company"
+ * - Otherwise                                            => null
  */
 export async function getRole(): Promise<UserRole> {
   const dev = getDevAuth();
   if (dev) return dev.role;
 
-  const { userId, orgRole } = await auth();
-  if (!userId) return null;
+  const { orgRole } = await safeClerkAuth();
   if (orgRole === ADMIN_ORG_ROLE) return "admin";
 
-  const rows = await db
-    .select({ id: companies.id })
-    .from(companies)
-    .where(eq(companies.clerkUserId, userId))
-    .limit(1);
-  return rows.length > 0 ? "company" : null;
+  const companyId = await getCompanyId();
+  return companyId ? "company" : null;
 }
 
-/** The company id claimed by the current Clerk user, or null. */
+/** The company id for the current portal user (email-free session or Clerk claim), or null. */
 export async function getCompanyId(): Promise<string | null> {
   const dev = getDevAuth();
   if (dev) {
@@ -45,9 +59,21 @@ export async function getCompanyId(): Promise<string | null> {
     return first[0]?.id ?? null;
   }
 
-  const { userId } = await auth();
-  if (!userId) return null;
+  // Primary path: email-free invite-code session. Re-check the row still exists
+  // (it could have been deleted by an admin) before trusting the cookie.
+  const sessionId = await getCompanySessionId();
+  if (sessionId) {
+    const rows = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.id, sessionId))
+      .limit(1);
+    if (rows[0]) return rows[0].id;
+  }
 
+  // Backward-compatible path: a company previously claimed via a Clerk account.
+  const { userId } = await safeClerkAuth();
+  if (!userId) return null;
   const rows = await db
     .select({ id: companies.id })
     .from(companies)
