@@ -1,4 +1,5 @@
 import {
+  clerkClient,
   clerkMiddleware,
   createRouteMatcher,
 } from "@clerk/nextjs/server";
@@ -16,10 +17,22 @@ const clerk = clerkMiddleware(async (auth, req) => {
   if (isAdminRoute(req)) {
     const { userId, orgRole, redirectToSignIn } = await auth();
     if (!userId) return redirectToSignIn();
-    // Signed in but not a TMCP admin — send them to the company portal.
-    if (orgRole !== ADMIN_ORG_ROLE) {
-      return NextResponse.redirect(new URL("/portal", req.url));
+
+    // orgRole only reflects the *active* org, which Clerk may not set. Accept it
+    // as a fast path, otherwise check the user's full membership list so a TMCP
+    // admin reaches /admin no matter which org is active.
+    if (orgRole === ADMIN_ORG_ROLE) return;
+    try {
+      const client = await clerkClient();
+      const memberships = await client.users.getOrganizationMembershipList({
+        userId,
+      });
+      if (memberships.data.some((m) => m.role === ADMIN_ORG_ROLE)) return;
+    } catch {
+      // fall through to redirect
     }
+    // Signed in but not a TMCP admin — send them to the company portal.
+    return NextResponse.redirect(new URL("/portal", req.url));
   }
 });
 

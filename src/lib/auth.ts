@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
 import { asc, eq } from "drizzle-orm";
@@ -28,6 +28,25 @@ async function safeClerkAuth(): Promise<{
 }
 
 /**
+ * Is this Clerk user an admin in the TMCP organization?
+ *
+ * auth().orgRole only reflects the *active* organization, which Clerk may not
+ * set when "membership is optional". So we check the user's full membership
+ * list — a staff member is an admin no matter which org is active.
+ */
+export async function isClerkAdmin(userId: string): Promise<boolean> {
+  try {
+    const client = await clerkClient();
+    const memberships = await client.users.getOrganizationMembershipList({
+      userId,
+    });
+    return memberships.data.some((m) => m.role === ADMIN_ORG_ROLE);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve the current user's role.
  * - TMCP Clerk organization member with the admin role  => "admin"
  * - A valid email-free company session (invite code)    => "company"
@@ -38,8 +57,10 @@ export async function getRole(): Promise<UserRole> {
   const dev = getDevAuth();
   if (dev) return dev.role;
 
-  const { orgRole } = await safeClerkAuth();
+  const { userId, orgRole } = await safeClerkAuth();
   if (orgRole === ADMIN_ORG_ROLE) return "admin";
+  // Fallback for when the TMCP org isn't the active org in this session.
+  if (userId && (await isClerkAdmin(userId))) return "admin";
 
   const companyId = await getCompanyId();
   return companyId ? "company" : null;
