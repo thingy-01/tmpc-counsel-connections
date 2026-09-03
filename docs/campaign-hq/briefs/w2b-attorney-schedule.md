@@ -249,3 +249,6 @@ Emit JSON matching `docs/campaign-hq/schemas/worker-result.json`. In `blockers`,
 the exact attorney-identity API you found; whether the resume route already handled the
 attorney case or you added it; the final CTE you shipped and how you verified nothing writes
 partially; and any acceptance case you could not exercise.
+
+## Root navigation completion
+Also own a narrow edit to src/app/page.tsx: make attorney sign-in discoverable from the public home page alongside existing company/staff choices, preserving the existing visual style and working links. Do not redesign the home page. Verify the new link reaches /attorney/login and the portal has logout/print navigation. This is needed for an independently usable attorney workflow.

@@ -25,9 +25,9 @@ branches from `campaign/w1*` to `codex/w1*`, and replaced the conductor runtime.
 |---|---|---|---|---|---|---|
 | Release preflight/local DB | Codex native agent release_preflight | none (scratch only) | work/release-preflight | /root/release_preflight | 2026-09-03 | complete; report at work/release-preflight/report.md |
 | Design/review conductor | Claude Opus 5, high | codex/counsel-connections-dev | task root | 72df8991-0ed1-47a9-a994-27fbdbf663ed | 2026-09-03 | bounded invocations; not currently running |
-| W1A: Onboarding/practice | Codex CLI | codex/w1a-onboarding | work/trees/w1a-onboarding | 01a06808-b314-72d2-8aa0-0bb261bdad29 | 2026-09-03 | resumed; direct exec 5933; log work/w1a-resume.jsonl |
-| W1B: Attorney auth | Codex CLI | codex/w1b-attorney-auth | work/trees/w1b-attorney-auth | 01a06808-bb43-79e1-888c-da5296b35179 | 2026-09-03 | resumed; direct exec 12860; log work/w1b-resume.jsonl |
-| W1C: Company scheduling | Codex CLI | codex/w1c-scheduling | work/trees/w1c-scheduling | 01a06808-c5de-71a1-aeed-4d771b4be803 | 2026-09-03 | resumed; direct exec 76271; log work/w1c-resume.jsonl |
+| W1A: Onboarding/practice | Codex CLI | codex/w1a-onboarding | work/trees/w1a-onboarding | 01a06808-b314-72d2-8aa0-0bb261bdad29 | 2026-09-03 | committed9f6a40e, integrated90065b9; checks passed; corrections tracked separately |
+| W1B: Attorney auth | Codex CLI | codex/w1b-attorney-auth | work/trees/w1b-attorney-auth | 01a06808-bb43-79e1-888c-da5296b35179 | 2026-09-03 | committed0f236a0, integrated4ee41ca; checks passed; access/login corrections tracked separately |
+| W1C: Company scheduling | Codex CLI | codex/w1c-scheduling | work/trees/w1c-scheduling | 01a06808-c5de-71a1-aeed-4d771b4be803 | 2026-09-03 | committed925dab3, integrated0103c3e; local race tests passed; percentage integration correction active |
 
 Collection rule: read the log **tail** and the exit-status file, never the head. A
 `thread.started` line is not evidence of success.
@@ -65,3 +65,10 @@ The Opus5 print-mode conductor returned a status report and exited0 at 16:13:42Z
 - W2 foundation active branch codex/w2-foundation in work/trees/w2-foundation fromfbfae1a (W1A+B; C has no ownership overlap), direct exec46176/logwork/w2-foundation.jsonl. Schema, SheetJS upgrade, test runner, navigation only.
 - W2A/B/C briefs prepared by Claude Opus5/high. Root launches from reviewed foundation+corrections+W1C merged base; no overlapping schema writers.
 - Synthetic QA fixture ready counsel_campaign_qa; private configwork/release-preflight/.env.qa.local; guideqa-guide.md. No production changes.
+
+## Current active processes (supersedes old dispatch state)
+- W2 foundation: codex/w2-foundation, work/trees/w2-foundation, Codex01a06825-9769-7620-b6e2-4e206f6d23d0, directexec46176, logwork/w2-foundation.jsonl. SheetJS0.20.3 installed via isolated npm cache after global cacheEPERM; schema implementation underway.
+- W1 integration corrections: codex/w1-integration-corrections, work/trees/w1-integration-corrections, base101622d, Codex01a06826-e64b-7760-843e-85c34ea0f2a6, directexec25511, logwork/w1-corrections.jsonl. Private localDB counsel_w1_corrections/config.env.w1-corrections.local.
+- Root local QA admin Next dev: directexec49118, localhost3000, synthetic counsel_campaign_qa, W1auth additiveSQL applied only here.
+- Aside admin browser QA: directexec91183, logwork/aside-w1-admin.log, Asidesession2026-09-03_aGkMULLNkrKOtBJG. Testing local dialog refresh/availability/resume/mobile; observed city immediate save. Root must stop this server before switchingrole or building.
+- Bounded Claude design/briefs and W1snapshotreview finished (exec47107/74309 bothexit0); no backgroundworkers. Work/reviews/w1-cross-model.md is snapshot, not final integrated gate.
