@@ -63,8 +63,11 @@ test("isSafeExternalUrl accepts public HTTPS DNS names only", () => {
   );
   assert.equal(isSafeExternalUrl("https://10.0.0.1/resume.pdf"), false);
   assert.equal(isSafeExternalUrl("https://127.0.0.1/resume.pdf"), false);
+  assert.equal(isSafeExternalUrl("https://[::1]/resume.pdf"), false);
+  assert.equal(isSafeExternalUrl("https://2130706433/resume.pdf"), false);
   assert.equal(isSafeExternalUrl("https://localhost/resume.pdf"), false);
   assert.equal(isSafeExternalUrl("https://files.internal/resume.pdf"), false);
+  assert.equal(isSafeExternalUrl("https://example.123/resume.pdf"), false);
 });
 
 test("upload limits are fixed", () => {

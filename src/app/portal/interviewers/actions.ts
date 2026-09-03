@@ -10,6 +10,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getCompanyId } from "@/lib/auth";
 
+export type InterviewerActionResult = { ok: boolean; error?: string };
+
 async function requireCompanyId(): Promise<string> {
   const id = await getCompanyId();
   if (!id) throw new Error("Not authenticated as a company.");
@@ -26,15 +28,20 @@ function requireUuid(value: FormDataEntryValue | null, label: string): string {
   return value;
 }
 
-async function requireOpenScheduling(companyId: string): Promise<string> {
+async function openSchedulingEventId(companyId: string): Promise<string | null> {
   const rows = await db
     .select({ eventId: companies.eventId })
     .from(companies)
     .innerJoin(events, eq(companies.eventId, events.id))
     .where(and(eq(companies.id, companyId), eq(events.status, "open")))
     .limit(1);
-  if (!rows[0]) throw new Error("Scheduling is closed for this event.");
-  return rows[0].eventId;
+  return rows[0]?.eventId ?? null;
+}
+
+async function requireOpenScheduling(companyId: string): Promise<string> {
+  const eventId = await openSchedulingEventId(companyId);
+  if (!eventId) throw new Error("Scheduling is closed for this event.");
+  return eventId;
 }
 
 function revalidateSchedules(eventId: string): void {
@@ -100,32 +107,66 @@ export async function addInterviewer(formData: FormData) {
   revalidatePath("/portal/schedule");
 }
 
-export async function updateInterviewer(formData: FormData) {
+export async function updateInterviewer(
+  formData: FormData
+): Promise<InterviewerActionResult> {
   const companyId = await requireCompanyId();
-  const id = formData.get("id") as string;
+  const eventId = await openSchedulingEventId(companyId);
+  if (!eventId) {
+    return { ok: false, error: "Scheduling is closed for this event." };
+  }
+  let id: string;
+  try {
+    id = requireUuid(formData.get("id"), "Interviewer identifier");
+  } catch {
+    return { ok: false, error: "That interviewer identifier is invalid." };
+  }
   const name = (formData.get("name") as string)?.trim();
   const email = (formData.get("email") as string)?.trim() || null;
   const phone = (formData.get("phone") as string)?.trim() || null;
-  if (!name) throw new Error("Interviewer name is required.");
+  if (!name) return { ok: false, error: "Interviewer name is required." };
 
-  await db
-    .update(companyInterviewers)
-    .set({ name, email, phone })
-    .where(
-      and(
-        eq(companyInterviewers.id, id),
-        eq(companyInterviewers.companyId, companyId)
-      )
-    );
+  const result = await db.execute<{ id: string }>(sql`
+    update company_interviewers as target
+    set name = ${name}, email = ${email}, phone = ${phone}
+    from companies as company, events as event
+    where target.id = cast(${id} as uuid)
+      and target.company_id = company.id
+      and company.id = cast(${companyId} as uuid)
+      and event.id = company.event_id
+      and event.status = 'open'
+    returning target.id
+  `);
+  if (result.rows.length !== 1) {
+    return {
+      ok: false,
+      error:
+        "That interviewer could not be updated. It may not belong to your company, or scheduling may have closed.",
+    };
+  }
 
   revalidatePath("/portal/interviewers");
-  revalidatePath("/portal/schedule");
+  revalidateSchedules(eventId);
+  return { ok: true };
 }
 
-export async function deleteInterviewer(formData: FormData) {
-  const companyId = await requireCompanyId();
-  const eventId = await requireOpenScheduling(companyId);
-  const id = requireUuid(formData.get("id"), "Interviewer identifier");
+export async function deleteInterviewer(
+  formData: FormData
+): Promise<InterviewerActionResult> {
+  const companyId = await getCompanyId();
+  if (!companyId) {
+    return { ok: false, error: "Your company session has expired." };
+  }
+  const eventId = await openSchedulingEventId(companyId);
+  if (!eventId) {
+    return { ok: false, error: "Scheduling is closed for this event." };
+  }
+  let id: string;
+  try {
+    id = requireUuid(formData.get("id"), "Interviewer identifier");
+  } catch {
+    return { ok: false, error: "That interviewer identifier is invalid." };
+  }
 
   // FK onDelete: set null clears this interviewer from any assignments.
   const result = await db.execute<{ id: string }>(sql`
@@ -139,14 +180,17 @@ export async function deleteInterviewer(formData: FormData) {
     returning target.id
   `);
   if (result.rows.length !== 1) {
-    throw new Error(
-      "That interviewer could not be removed. It may not belong to your company, or scheduling may have closed."
-    );
+    return {
+      ok: false,
+      error:
+        "That interviewer could not be removed. It may not belong to your company, or scheduling may have closed.",
+    };
   }
   await applyDefaultInterviewer(companyId);
 
   revalidatePath("/portal/interviewers");
   revalidateSchedules(eventId);
+  return { ok: true };
 }
 
 /** Assign (or clear) the interviewer for a single interview/assignment. */

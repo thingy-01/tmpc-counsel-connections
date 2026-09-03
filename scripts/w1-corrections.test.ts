@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import test, { mock } from "node:test";
 import { config } from "dotenv";
 import { Pool } from "pg";
@@ -15,22 +15,25 @@ import {
   isStaffAdminMembership,
 } from "../src/lib/staff-authorization";
 import { logAttorneyAuthFailure } from "../src/app/attorney/safe-logging";
+import { requireLocalTestDatabase } from "./test-database-guard";
 
 mock.module("server-only", { defaultExport: {} });
+mock.module("next/cache", {
+  namedExports: { revalidatePath: () => undefined },
+});
 
-const envFile = process.env.W1_TEST_ENV_FILE;
+const envFile = process.env.COUNSEL_TEST_ENV_FILE;
 if (envFile) {
-  const loaded = config({ path: resolve(process.cwd(), envFile), quiet: true });
-  if (loaded.error) throw new Error("Could not load W1_TEST_ENV_FILE.");
+  if (!isAbsolute(envFile)) {
+    throw new Error("COUNSEL_TEST_ENV_FILE must be an absolute path.");
+  }
+  const loaded = config({ path: envFile, quiet: true });
+  if (loaded.error) throw new Error("Could not load COUNSEL_TEST_ENV_FILE.");
 }
 
 const databaseUrl = process.env.DATABASE_URL;
 if (envFile) {
-  if (!databaseUrl) throw new Error("DATABASE_URL is required in W1_TEST_ENV_FILE.");
-  const target = new URL(databaseUrl);
-  if (target.hostname !== "127.0.0.1" || target.port !== "55432") {
-    throw new Error("Refusing W1 behavior tests outside 127.0.0.1:55432.");
-  }
+  requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
 }
 
 async function createLocalEnrollment(pool: Pool, label: string) {
@@ -213,7 +216,7 @@ test("assigned contact projection excludes unrelated attorney contact data", asy
 
 test("callback same-origin policy rejects missing and foreign origins", async () => {
   const { isSameOriginAttorneyCallbackPost } = await import(
-    "../src/app/attorney/callback/route"
+    "../src/app/attorney/callback/policy"
   );
   const url = "https://counsel.example/attorney/callback";
   assert.equal(isSameOriginAttorneyCallbackPost(new Request(url)), false);
@@ -256,9 +259,82 @@ test("misconfigured production attorney callback fails closed without a 500", as
 });
 
 test(
+  "interviewer edits validate ownership and stop when scheduling closes",
+  { skip: !envFile },
+  async () => {
+    requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
+    assert.ok(databaseUrl);
+    const pool = new Pool({ connectionString: databaseUrl });
+    const label = randomUUID();
+    let eventId: string | undefined;
+    const previousDevAuth = process.env.DEV_AUTH;
+
+    try {
+      const event = await pool.query<{ id: string }>(
+        `insert into events (name, start_date, end_date, status)
+         values ($1, date '2099-01-01', date '2099-01-02', 'open')
+         returning id`,
+        [`Interviewer action test ${label}`]
+      );
+      eventId = event.rows[0].id;
+      const company = await pool.query<{ id: string }>(
+        `insert into companies (event_id, name) values ($1, $2) returning id`,
+        [eventId, `Interviewer company ${label}`]
+      );
+      const companyId = company.rows[0].id;
+      const interviewer = await pool.query<{ id: string }>(
+        `insert into company_interviewers (company_id, name)
+         values ($1, 'Before') returning id`,
+        [companyId]
+      );
+      const interviewerId = interviewer.rows[0].id;
+      process.env.DEV_AUTH = `company:${companyId}`;
+      const actions = await import(
+        "../src/app/portal/interviewers/actions"
+      );
+
+      const valid = new FormData();
+      valid.set("id", interviewerId);
+      valid.set("name", "After");
+      assert.deepEqual(await actions.updateInterviewer(valid), { ok: true });
+
+      const forged = new FormData();
+      forged.set("id", randomUUID());
+      forged.set("name", "Forged");
+      assert.equal((await actions.updateInterviewer(forged)).ok, false);
+
+      await pool.query(`update events set status = 'closed' where id = $1`, [
+        eventId,
+      ]);
+      assert.deepEqual(await actions.updateInterviewer(valid), {
+        ok: false,
+        error: "Scheduling is closed for this event.",
+      });
+      const remove = new FormData();
+      remove.set("id", interviewerId);
+      assert.deepEqual(await actions.deleteInterviewer(remove), {
+        ok: false,
+        error: "Scheduling is closed for this event.",
+      });
+      const unchanged = await pool.query<{ name: string }>(
+        `select name from company_interviewers where id = $1`,
+        [interviewerId]
+      );
+      assert.equal(unchanged.rows[0].name, "After");
+    } finally {
+      if (previousDevAuth === undefined) delete process.env.DEV_AUTH;
+      else process.env.DEV_AUTH = previousDevAuth;
+      if (eventId) await pool.query(`delete from events where id = $1`, [eventId]);
+      await pool.end();
+    }
+  }
+);
+
+test(
   "local callback checks do not consume tokens and redemption stays atomic",
   { skip: !envFile },
   async () => {
+    requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl });
     const auth = await import("../src/app/attorney/auth");
@@ -329,6 +405,7 @@ test(
   "local cleanup is bounded and preserves an active shared rate-limit budget",
   { skip: !envFile },
   async () => {
+    requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl });
     const auth = await import("../src/app/attorney/auth");

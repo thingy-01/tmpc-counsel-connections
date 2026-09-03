@@ -66,14 +66,21 @@ async function main() {
   refuseProduction();
   validateDatabaseUrl();
 
-  const tests = (await findTests(path.resolve("src"))).sort();
+  const tests = (
+    await Promise.all([
+      findTests(path.resolve("src")),
+      findTests(path.resolve("scripts")),
+    ])
+  )
+    .flat()
+    .sort();
   if (tests.length === 0) {
-    throw new Error("No *.test.ts files found under src/.");
+    throw new Error("No *.test.ts files found under src/ or scripts/.");
   }
 
   const child = spawnSync(
     process.execPath,
-    ["--import", "tsx", "--test", ...tests],
+    ["--experimental-test-module-mocks", "--import", "tsx", "--test", ...tests],
     { stdio: "inherit", env: process.env }
   );
 

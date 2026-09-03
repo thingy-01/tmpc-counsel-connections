@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { constraintViolated } from "./db/errors";
+import { requireLocalTestDatabase } from "../../scripts/test-database-guard";
 import {
   atomicRescheduleStatement,
   canTransitionRescheduleRequest,
@@ -46,6 +47,7 @@ test(
   "the database atomically preserves conflicts and resolves a valid closed-event move",
   { skip: !process.env.DATABASE_URL },
   async () => {
+    requireLocalTestDatabase();
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
     const database = drizzle(pool);
     const eventId = randomUUID();

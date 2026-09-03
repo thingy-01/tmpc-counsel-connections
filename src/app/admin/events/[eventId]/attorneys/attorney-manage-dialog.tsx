@@ -21,6 +21,7 @@ import {
   type ActionResult,
 } from "./actions";
 import { EditAttorneySection } from "./attorney-form";
+import { safeResumeReferenceHref } from "@/lib/resume-reference";
 
 export type ManageableAttorney = {
   id: string;
@@ -318,19 +319,29 @@ export default function AttorneyManageDialog({
               <div className="mt-4 rounded-md border border-slate-200 p-3">
                 <p className="text-xs font-semibold text-slate-700">External resume references (read-only)</p>
                 <ul className="mt-2 space-y-1">
-                  {attorney.resumeReferences.map((reference) => (
+                  {attorney.resumeReferences.map((reference) => {
+                    const safeHref = safeResumeReferenceHref(reference.url);
+                    const label = reference.label ?? "Unverified external reference";
+                    return (
                     <li key={reference.url}>
-                      <a
-                        href={reference.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
-                        {reference.label ?? "Unverified external reference"}
-                      </a>
+                      {safeHref ? (
+                        <a
+                          href={safeHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-blue-600 hover:underline"
+                        >
+                          {label}
+                        </a>
+                      ) : (
+                        <span className="text-sm text-slate-500">
+                          {label} (unsupported URL)
+                        </span>
+                      )}
                       <span className="ml-2 text-xs text-slate-400">{reference.status}</span>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
                 <p className="mt-2 text-xs text-amber-700">These links were not fetched or verified by the server.</p>
               </div>

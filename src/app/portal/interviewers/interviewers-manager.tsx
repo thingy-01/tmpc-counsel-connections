@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
   addInterviewer,
   updateInterviewer,
   deleteInterviewer,
+  type InterviewerActionResult,
 } from "./actions";
 
 export type Interviewer = {
@@ -22,6 +23,30 @@ export type Interviewer = {
   email: string | null;
   phone: string | null;
 };
+
+const initialInterviewerAction: InterviewerActionResult = { ok: false };
+
+function RemoveInterviewerForm({ id }: { id: string }) {
+  const [state, action, pending] = useActionState(
+    async (_previous: InterviewerActionResult, formData: FormData) =>
+      deleteInterviewer(formData),
+    initialInterviewerAction
+  );
+
+  return (
+    <form action={action} className="flex flex-col items-end gap-1">
+      <input type="hidden" name="id" value={id} />
+      <Button variant="ghost" size="sm" type="submit" disabled={pending}>
+        {pending ? "Removing…" : "Remove"}
+      </Button>
+      {state.error && (
+        <span className="max-w-64 text-right text-xs text-red-600" role="alert">
+          {state.error}
+        </span>
+      )}
+    </form>
+  );
+}
 
 const inputClass =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
@@ -32,6 +57,7 @@ export default function InterviewersManager({
   interviewers: Interviewer[];
 }) {
   const [editing, setEditing] = useState<Interviewer | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -93,16 +119,14 @@ export default function InterviewersManager({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setEditing(iv)}
+                      onClick={() => {
+                        setEditError(null);
+                        setEditing(iv);
+                      }}
                     >
                       Edit
                     </Button>
-                    <form action={deleteInterviewer}>
-                      <input type="hidden" name="id" value={iv.id} />
-                      <Button variant="ghost" size="sm" type="submit">
-                        Remove
-                      </Button>
-                    </form>
+                    <RemoveInterviewerForm id={iv.id} />
                   </div>
                 </td>
               </tr>
@@ -128,8 +152,13 @@ export default function InterviewersManager({
           {editing && (
             <form
               action={async (formData) => {
-                await updateInterviewer(formData);
-                setEditing(null);
+                const result = await updateInterviewer(formData);
+                if (result.ok) {
+                  setEditError(null);
+                  setEditing(null);
+                } else {
+                  setEditError(result.error ?? "The interviewer could not be updated.");
+                }
               }}
               className="space-y-3"
             >
@@ -176,6 +205,11 @@ export default function InterviewersManager({
                 </Button>
                 <Button type="submit">Save</Button>
               </DialogFooter>
+              {editError && (
+                <p className="text-sm text-red-600" role="alert">
+                  {editError}
+                </p>
+              )}
             </form>
           )}
         </DialogContent>

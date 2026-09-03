@@ -7,6 +7,7 @@ import {
   assertAttorneySessionConfigured,
   setAttorneySession,
 } from "@/lib/session";
+import { isSameOriginAttorneyCallbackPost } from "./policy";
 
 const PRIVATE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -21,16 +22,6 @@ function redirectToLogin(request: Request, error: "invalid" | "unavailable") {
     new URL(`/attorney/login?error=${error}`, request.url),
     { status: 303, headers: PRIVATE_HEADERS }
   );
-}
-
-export function isSameOriginAttorneyCallbackPost(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-  try {
-    return new URL(origin).origin === new URL(request.url).origin;
-  } catch {
-    return false;
-  }
 }
 
 function confirmationHtml(token: string): string {

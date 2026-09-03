@@ -18,6 +18,7 @@ import {
 import { applyRosterImport, correctRosterPreview, stageRosterPreview } from "./service";
 import type { ColumnMapping, StoredRow } from "./types";
 import { inspectWorkbook, type WorkbookInspection } from "./workbook";
+import { requireLocalTestDatabase } from "../../../scripts/test-database-guard";
 
 const databaseEnabled = Boolean(process.env.DATABASE_URL);
 const mapping: ColumnMapping = {
@@ -56,6 +57,7 @@ function row(values: { first: string; last: string; email?: string; firm: string
 }
 
 test("database apply is idempotent and preserves schedule, status, unavailability, and uploaded resume fields", { skip: !databaseEnabled }, async (t) => {
+  requireLocalTestDatabase();
   const createdEvent = await db.insert(events).values({ name: "Synthetic import preservation", startDate: "2031-01-01", endDate: "2031-01-02", status: "draft" }).returning({ id: events.id });
   const eventId = createdEvent[0].id;
   t.after(async () => { await db.delete(events).where(eq(events.id, eventId)); });

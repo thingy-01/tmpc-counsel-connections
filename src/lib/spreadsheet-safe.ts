@@ -1,5 +1,3 @@
-import { isIP } from "node:net";
-
 /** Maximum accepted workbook upload size in bytes. */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -59,6 +57,20 @@ export function escapeForSpreadsheet(value: string): string {
   return /^[=+\-@\t\r\n]/.test(value) ? `'${value}` : value;
 }
 
+/** URL parsing canonicalizes alternate IPv4 spellings; reject those and IPv6. */
+function isIpHostname(hostname: string): boolean {
+  if (hostname.includes(":") || hostname.startsWith("[") || hostname.endsWith("]")) {
+    return true;
+  }
+  const parts = hostname.split(".");
+  return (
+    parts.length === 4 &&
+    parts.every(
+      (part) => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255
+    )
+  );
+}
+
 /** Accepts public-looking HTTPS DNS URLs without resolving or fetching them. */
 export function isSafeExternalUrl(raw: string): boolean {
   let url: URL;
@@ -71,7 +83,7 @@ export function isSafeExternalUrl(raw: string): boolean {
   if (url.protocol !== "https:" || url.username || url.password) return false;
 
   const hostname = url.hostname.toLowerCase();
-  if (!hostname || isIP(hostname) !== 0) return false;
+  if (!hostname || isIpHostname(hostname)) return false;
   if (
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||
@@ -85,6 +97,7 @@ export function isSafeExternalUrl(raw: string): boolean {
 
   const labels = hostname.split(".");
   if (labels.length < 2) return false;
+  if (/^\d+$/.test(labels.at(-1) ?? "")) return false;
   return labels.every(
     (label) =>
       label.length > 0 &&

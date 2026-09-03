@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { requireLocalTestDatabase } from "../../../scripts/test-database-guard";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq } from "drizzle-orm";
@@ -369,6 +370,7 @@ async function cleanup(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  requireLocalTestDatabase();
   assert.equal(
     process.env.ATTORNEY_EMAIL_TRANSPORT,
     "capture",

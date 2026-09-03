@@ -17,6 +17,13 @@ import type {
 import { sourceHash } from "./preview";
 import type { MailMergeAttorney } from "./mail-merge";
 
+export class NotificationEventNotFoundError extends Error {
+  constructor() {
+    super("Event not found.");
+    this.name = "NotificationEventNotFoundError";
+  }
+}
+
 export async function loadEventAudience(
   eventId: string,
   audience: StoredAudience
@@ -26,7 +33,7 @@ export async function loadEventAudience(
   sourceHash: string;
 }> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-  if (!event) throw new Error("Event not found.");
+  if (!event) throw new NotificationEventNotFoundError();
 
   const [attorneyRows, scheduleRows] = await Promise.all([
     db
