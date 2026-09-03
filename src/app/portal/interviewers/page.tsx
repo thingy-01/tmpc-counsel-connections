@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
-import { companyInterviewers } from "@/lib/db/schema";
+import { companies, companyInterviewers } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getCompanyId } from "@/lib/auth";
 import InterviewersManager from "./interviewers-manager";
+import { redirect } from "next/navigation";
+import { incompleteCompanyProfileRedirect } from "@/lib/company-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,16 @@ export default async function InterviewersPage() {
       <div className="text-slate-500">Session expired. Please sign in again.</div>
     );
   }
+
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+    columns: { contactName: true, contactEmail: true },
+  });
+  if (!company) {
+    return <div className="text-slate-500">Company not found.</div>;
+  }
+  const profileRedirect = incompleteCompanyProfileRedirect(company);
+  if (profileRedirect) redirect(profileRedirect);
 
   const interviewers = await db
     .select({

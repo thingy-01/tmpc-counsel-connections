@@ -7,12 +7,22 @@ import { updateMyCompany, type ProfileResult } from "./actions";
 
 const idle: ProfileResult = { ok: false };
 
-export default function ProfileForm({ company }: { company: CompanyFieldValues }) {
+export default function ProfileForm({
+  company,
+  requireProfileContacts,
+}: {
+  company: CompanyFieldValues;
+  requireProfileContacts: boolean;
+}) {
   const [state, formAction, pending] = useActionState(updateMyCompany, idle);
 
   return (
     <form action={formAction} className="space-y-4">
-      <CompanyFields company={company} includeName={false} />
+      <CompanyFields
+        company={company}
+        includeName={false}
+        requireProfileContacts={requireProfileContacts}
+      />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.ok && (
         <p className="text-sm text-emerald-600">Profile saved. Thank you!</p>

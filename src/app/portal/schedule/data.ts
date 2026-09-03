@@ -19,6 +19,8 @@ import {
   type PublicPracticeArea,
 } from "./practice-display";
 import { buildCompanySafeAttorneys } from "@/lib/roster-import/company-safe-projection";
+import { incompleteCompanyProfileRedirect } from "@/lib/company-profile";
+import { redirect } from "next/navigation";
 
 export type CompanyScheduleAttorney = {
   id: string;
@@ -98,6 +100,8 @@ export async function getCompanyScheduleProjection(): Promise<
       eventId: companies.eventId,
       companyName: companies.name,
       preferredPlatform: companies.preferredPlatform,
+      contactName: companies.contactName,
+      contactEmail: companies.contactEmail,
       eventName: events.name,
       eventLocation: events.location,
       eventStatus: events.status,
@@ -109,6 +113,9 @@ export async function getCompanyScheduleProjection(): Promise<
     .limit(1);
   const context = contexts[0];
   if (!context) return null;
+
+  const profileRedirect = incompleteCompanyProfileRedirect(context);
+  if (profileRedirect) redirect(profileRedirect);
 
   const [rawSlots, rawAttorneys, rawBlocks, ownAssignments, otherBookings, interviewers, rawReferences] =
     await Promise.all([

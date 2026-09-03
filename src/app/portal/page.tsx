@@ -10,7 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Link from "next/link";
-import { isCompanyProfileComplete } from "@/lib/company-profile";
+import { redirect } from "next/navigation";
+import { incompleteCompanyProfileRedirect } from "@/lib/company-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -51,24 +52,27 @@ export default async function PortalHome() {
     );
   }
 
-  const [company, [{ interviewCount }]] = await Promise.all([
-    db.query.companies.findFirst({ where: eq(companies.id, companyId) }),
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.id, companyId),
+  });
+  if (!company) {
+    return <div className="text-slate-500">Company not found.</div>;
+  }
+
+  const profileRedirect = incompleteCompanyProfileRedirect(company);
+  if (profileRedirect) redirect(profileRedirect);
+
+  const [[{ interviewCount }], event] = await Promise.all([
     db
       .select({ interviewCount: count() })
       .from(assignments)
       .where(eq(assignments.companyId, companyId)),
+    // The event this company belongs to (not just any event in the DB).
+    db.query.events.findFirst({ where: eq(events.id, company.eventId) }),
   ]);
-
-  // The event this company belongs to (not just any event in the DB).
-  const event = company
-    ? await db.query.events.findFirst({ where: eq(events.id, company.eventId) })
-    : null;
-
-  if (!company || !event) {
-    return <div className="text-slate-500">Company not found.</div>;
+  if (!event) {
+    return <div className="text-slate-500">Company event not found.</div>;
   }
-
-  const profileComplete = isCompanyProfileComplete(company);
 
   const startDate = new Date(event.startDate + "T00:00:00").toLocaleDateString(
     "en-US",
@@ -88,25 +92,6 @@ export default async function PortalHome() {
         </div>
         <p className="mt-1 text-slate-500">Counsel Connections Participant</p>
       </div>
-
-      {/* Prompt new companies to complete their profile. */}
-      {!profileComplete && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-medium text-amber-900">
-            Welcome! Please complete your company profile.
-          </p>
-          <p className="mt-0.5 text-sm text-amber-800">
-            Add your contact details, practice areas, and other information so
-            TMCP and your matched attorneys have what they need.
-          </p>
-          <Link
-            href="/portal/profile"
-            className="mt-3 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"
-          >
-            Complete profile →
-          </Link>
-        </div>
-      )}
 
       {/* Event info */}
       <Card className="mb-6 bg-white">

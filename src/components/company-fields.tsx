@@ -26,9 +26,11 @@ const inputClass =
 export default function CompanyFields({
   company,
   includeName = true,
+  requireProfileContacts = false,
 }: {
   company?: CompanyFieldValues;
   includeName?: boolean;
+  requireProfileContacts?: boolean;
 }) {
   const areas = Array.isArray(company?.practiceAreas)
     ? (company!.practiceAreas as string[]).join(", ")
@@ -109,16 +111,31 @@ export default function CompanyFields({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact name</label>
-        <input name="contactName" defaultValue={company?.contactName ?? ""} className={inputClass} />
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          Contact name{requireProfileContacts ? " *" : ""}
+        </label>
+        <input
+          name="contactName"
+          required={requireProfileContacts}
+          defaultValue={company?.contactName ?? ""}
+          className={inputClass}
+        />
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-600">Contact title</label>
         <input name="contactTitle" defaultValue={company?.contactTitle ?? ""} className={inputClass} />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Contact email</label>
-        <input type="email" name="contactEmail" defaultValue={company?.contactEmail ?? ""} className={inputClass} />
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          Contact email{requireProfileContacts ? " *" : ""}
+        </label>
+        <input
+          type="email"
+          name="contactEmail"
+          required={requireProfileContacts}
+          defaultValue={company?.contactEmail ?? ""}
+          className={inputClass}
+        />
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-600">Contact phone</label>

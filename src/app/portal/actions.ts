@@ -5,7 +5,7 @@ import { companies } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { setCompanySession, clearCompanySession } from "@/lib/session";
-import { isCompanyProfileComplete } from "@/lib/company-profile";
+import { companyPortalLoginDestination } from "@/lib/company-profile";
 
 export type LoginResult = { ok: boolean; error?: string };
 
@@ -45,11 +45,7 @@ export async function loginCompany(
       .where(eq(companies.id, company.id));
   }
 
-  redirect(
-    isCompanyProfileComplete(company)
-      ? "/portal/schedule"
-      : "/portal/profile"
-  );
+  redirect(companyPortalLoginDestination(company));
 }
 
 export async function logoutCompany(): Promise<void> {

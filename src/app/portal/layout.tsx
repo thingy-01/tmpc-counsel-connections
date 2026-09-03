@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCompanyId } from "@/lib/auth";
 import CompanyLogin from "./claim-company";
 import PortalLogout from "./portal-logout";
+import { isCompanyProfileComplete } from "@/lib/company-profile";
 
 const navItems = [
   { href: "/portal", label: "Home" },
@@ -28,9 +29,18 @@ export default async function PortalLayout({
 
   const company = await db.query.companies.findFirst({
     where: eq(companies.id, companyId),
-    columns: { name: true },
+    columns: { name: true, contactName: true, contactEmail: true },
   });
   const companyName = company?.name ?? "Company Portal";
+  const profileComplete = company
+    ? isCompanyProfileComplete(company)
+    : false;
+  const availableNavItems = profileComplete
+    ? navItems
+    : navItems.filter((item) => item.href === "/portal/profile");
+  const companyHome = profileComplete
+    ? "/portal"
+    : "/portal/profile?onboarding=1";
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -57,7 +67,7 @@ export default async function PortalLayout({
         </summary>
 
         <nav aria-label="Company portal" className="space-y-0.5 px-3 pb-3">
-          {navItems.map((item) => (
+          {availableNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -67,6 +77,12 @@ export default async function PortalLayout({
             </Link>
           ))}
         </nav>
+
+        {!profileComplete && (
+          <p className="mx-4 mb-3 rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">
+            Complete your company information to unlock the portal.
+          </p>
+        )}
 
         {/* Logout keeps its shared markup; sized up here for a tappable target. */}
         <div className="flex items-center justify-between gap-2 border-t border-slate-700 px-4 py-3 [&_button]:px-3 [&_button]:py-2.5 [&_button]:text-sm">
@@ -78,7 +94,7 @@ export default async function PortalLayout({
       {/* Sidebar (desktop) */}
       <aside className="hidden w-56 shrink-0 flex-col border-r bg-slate-900 text-slate-100 md:flex print:hidden">
         <div className="border-b border-slate-700 p-5">
-          <Link href="/portal">
+          <Link href={companyHome}>
             <h2 className="text-base font-bold leading-tight text-white">
               {companyName}
             </h2>
@@ -87,7 +103,7 @@ export default async function PortalLayout({
         </div>
 
         <nav className="flex-1 space-y-0.5 p-3">
-          {navItems.map((item) => (
+          {availableNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -97,6 +113,12 @@ export default async function PortalLayout({
             </Link>
           ))}
         </nav>
+
+        {!profileComplete && (
+          <p className="mx-4 mb-4 rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">
+            Complete your company information to unlock the portal.
+          </p>
+        )}
 
         <div className="flex items-center justify-between gap-2 border-t border-slate-700 p-4">
           <span className="text-xs text-slate-400">Signed in</span>
