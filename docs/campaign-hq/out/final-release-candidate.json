@@ -1,0 +1,18 @@
+{
+  "status": "partial",
+  "branch": "codex/counsel-connections-dev",
+  "commit": "3d0fb8c2e4a73d5ebc7530e833f42d6bce2a0090",
+  "files_changed": [
+    "docs/campaign-hq/CAMPAIGN.md",
+    "docs/campaign-hq/LEARNINGS.md",
+    "docs/campaign-hq/out/final-release-candidate.json"
+  ],
+  "verify_cmd": "npm run lint && npx tsc --noEmit && npm test && npm run build; isolated local PostgreSQL integration suites; independent Claude and CodeRabbit review; role-based local browser acceptance; restored-production migration rehearsal for 0001, 0002, and 0003; JSON Schema validation; git diff --check",
+  "verify_result": {
+    "passed": true,
+    "output_tail": "Integrated release candidate verification passed: lint, strict TypeScript, 54 database-configured tests, production build, independent reviews, complete local browser acceptance, and a single-transaction three-migration rehearsal with unchanged original data and relationships. No production mutation or real participant email occurred."
+  },
+  "blockers": [
+    "Configure and verify the production email provider credentials and approved sender identity."
+  ]
+}
