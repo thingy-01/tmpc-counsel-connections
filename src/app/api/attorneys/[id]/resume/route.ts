@@ -1,6 +1,6 @@
 import { and, eq, ne, or, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
-import { getCompanyId, getRole } from "@/lib/auth";
+import { getAttorneyIdentity, getCompanyId, getRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assignments, attorneys, companies } from "@/lib/db/schema";
 import { readResume } from "@/lib/storage";
@@ -18,11 +18,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const role = await getRole();
-  if (role === null) return privateResponse("Unauthorized", 401);
-  // Explicit allowlist: future roles (including attorney) inherit no access.
-  if (role !== "admin" && role !== "company") {
-    return privateResponse("Forbidden", 403);
-  }
 
   const { id } = await params;
   if (!UUID_PATTERN.test(id)) return privateResponse("Not found", 404);
@@ -41,7 +36,7 @@ export async function GET(
       .where(eq(attorneys.id, id))
       .limit(1);
     attorney = rows[0];
-  } else {
+  } else if (role === "company") {
     const companyId = await getCompanyId();
     if (!companyId) return privateResponse("Unauthorized", 401);
 
@@ -65,6 +60,30 @@ export async function GET(
                 and ${assignments.companyId} = ${companies.id}
             )`
           )
+        )
+      )
+      .limit(1);
+    attorney = rows[0];
+  } else {
+    let identity;
+    try {
+      identity = await getAttorneyIdentity();
+    } catch {
+      return privateResponse("Unavailable", 503);
+    }
+    if (!identity) return privateResponse("Unauthorized", 401);
+    if (identity.attorneyId !== id) return privateResponse("Forbidden", 403);
+
+    const rows = await db
+      .select({
+        resumePath: attorneys.resumePath,
+        resumeOriginalName: attorneys.resumeOriginalName,
+      })
+      .from(attorneys)
+      .where(
+        and(
+          eq(attorneys.id, identity.attorneyId),
+          eq(attorneys.eventId, identity.eventId)
         )
       )
       .limit(1);

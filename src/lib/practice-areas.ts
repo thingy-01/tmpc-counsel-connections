@@ -44,11 +44,17 @@ export type PracticeAreaEntry = {
   percent?: number;
 };
 
+export type SerializedPracticeAreaEntry = PracticeAreaEntry & {
+  percentScale?: "whole" | "fraction";
+};
+
 export type ParsedPracticeAreas = {
   entries: PracticeAreaEntry[];
   percentageFormat: "fraction" | "whole";
   hasMissingPercentages: boolean;
   hasMoreThanTwoAreas: boolean;
+  hasAmbiguousLegacyScale: boolean;
+  hasInvalidPercentageTotal: boolean;
   incomplete: boolean;
 };
 
@@ -73,6 +79,7 @@ export function parsePracticeAreas(
   options: PracticeAreaParseOptions = {}
 ): ParsedPracticeAreas {
   const entries: PracticeAreaEntry[] = [];
+  const declaredScales = new Set<"fraction" | "whole">();
 
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -82,7 +89,11 @@ export function parsePracticeAreas(
       }
 
       if (!item || typeof item !== "object") continue;
-      const candidate = item as { area?: unknown; percent?: unknown };
+      const candidate = item as {
+        area?: unknown;
+        percent?: unknown;
+        percentScale?: unknown;
+      };
       if (typeof candidate.area !== "string") continue;
       if (!candidate.area.trim()) continue;
       const area = candidate.area;
@@ -92,6 +103,12 @@ export function parsePracticeAreas(
         Number.isFinite(candidate.percent)
       ) {
         entries.push({ area, percent: candidate.percent });
+        if (
+          candidate.percentScale === "fraction" ||
+          candidate.percentScale === "whole"
+        ) {
+          declaredScales.add(candidate.percentScale);
+        }
       } else {
         entries.push({ area });
       }
@@ -105,12 +122,20 @@ export function parsePracticeAreas(
     (total, percent) => total + percent,
     0
   );
+  const autoDetectPercentageFormat =
+    options.percentageFormat === undefined ||
+    options.percentageFormat === "auto";
+  const isUnmarkedLegacyFraction =
+    autoDetectPercentageFormat &&
+    declaredScales.size === 0 &&
+    suppliedPercentages.length > 0 &&
+    suppliedPercentages.every((percent) => percent >= 0 && percent <= 1) &&
+    Math.abs(suppliedTotal - 1) <= 0.000001;
   const percentageFormat =
     options.percentageFormat === "fraction" ||
     (options.percentageFormat !== "whole" &&
-      suppliedPercentages.length > 0 &&
-      suppliedPercentages.every((percent) => percent >= 0 && percent <= 1) &&
-      Math.abs(suppliedTotal - 1) <= 0.000001)
+      !declaredScales.has("whole") &&
+      (declaredScales.has("fraction") || isUnmarkedLegacyFraction))
       ? "fraction"
       : "whole";
 
@@ -126,13 +151,33 @@ export function parsePracticeAreas(
     (entry) => entry.percent === undefined
   );
   const hasMoreThanTwoAreas = entries.length > 2;
+  const normalizedTotal = entries.reduce(
+    (total, entry) => total + (entry.percent ?? 0),
+    0
+  );
+  const hasInvalidPercentageTotal =
+    entries.length > 0 &&
+    !hasMissingPercentages &&
+    Math.abs(normalizedTotal - 100) > 0.000001;
+  const hasAmbiguousLegacyScale =
+    autoDetectPercentageFormat &&
+    declaredScales.size === 0 &&
+    suppliedPercentages.length > 0 &&
+    suppliedPercentages.every((percent) => percent >= 0 && percent <= 1) &&
+    !isUnmarkedLegacyFraction;
 
   return {
     entries,
     percentageFormat,
     hasMissingPercentages,
     hasMoreThanTwoAreas,
-    incomplete: hasMissingPercentages || hasMoreThanTwoAreas,
+    hasAmbiguousLegacyScale,
+    hasInvalidPercentageTotal,
+    incomplete:
+      hasMissingPercentages ||
+      hasMoreThanTwoAreas ||
+      hasAmbiguousLegacyScale ||
+      hasInvalidPercentageTotal,
   };
 }
 
@@ -143,15 +188,31 @@ export function parsePracticeAreas(
  */
 export function serializePracticeAreas(
   entries: readonly PracticeAreaEntry[]
-): PracticeAreaEntry[] {
+): SerializedPracticeAreaEntry[] {
   return entries
     .map((entry) => {
       const area = entry.area;
       return entry.percent === undefined
         ? { area }
-        : { area, percent: entry.percent };
+        : { area, percent: entry.percent, percentScale: "whole" as const };
     })
     .filter((entry) => entry.area.trim().length > 0);
+}
+
+/** Compare normalized editor values without trusting a client-side bypass flag. */
+export function practiceAreaEntriesEqual(
+  left: readonly PracticeAreaEntry[],
+  right: readonly PracticeAreaEntry[]
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => {
+    const candidate = right[index];
+    if (!candidate || entry.area !== candidate.area) return false;
+    if (entry.percent === undefined || candidate.percent === undefined) {
+      return entry.percent === candidate.percent;
+    }
+    return Math.abs(entry.percent - candidate.percent) <= 0.000001;
+  });
 }
 
 /** Case-insensitive membership is for recognition only; it does not rewrite labels. */

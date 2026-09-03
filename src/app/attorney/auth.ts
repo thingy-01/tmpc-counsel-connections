@@ -27,7 +27,7 @@ export function normalizeAttorneyEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function isPlausibleEmail(value: string): boolean {
+export function isPlausibleAttorneyEmail(value: string): boolean {
   return (
     value.length > 2 &&
     value.length <= MAX_EMAIL_LENGTH &&
@@ -67,6 +67,41 @@ export async function claimAttorneyDeliveryAttempt(
     .returning({ attempts: attorneyLoginRateLimits.attempts });
 
   return rows.length === 1 && rows[0].attempts <= 3;
+}
+
+/**
+ * Opportunistically prune only long-expired rows, in fixed-size batches. The
+ * repeated age predicate on each DELETE protects a concurrently reset active
+ * rate-limit window from being removed after lock contention.
+ */
+export async function cleanupExpiredAttorneyAuthRows(): Promise<void> {
+  await db.execute(sql`
+    with doomed as (
+      select token."id"
+        from "attorney_tokens" as token
+       where token."expires_at" <= now() - interval '1 day'
+       order by token."expires_at", token."id"
+       limit 100
+    )
+    delete from "attorney_tokens" as token
+     using doomed
+     where token."id" = doomed."id"
+       and token."expires_at" <= now() - interval '1 day'
+  `);
+
+  await db.execute(sql`
+    with doomed as (
+      select rate."normalized_email"
+        from "attorney_login_rate_limits" as rate
+       where rate."window_started_at" <= now() - interval '1 day'
+       order by rate."window_started_at", rate."normalized_email"
+       limit 100
+    )
+    delete from "attorney_login_rate_limits" as rate
+     using doomed
+     where rate."normalized_email" = doomed."normalized_email"
+       and rate."window_started_at" <= now() - interval '1 day'
+  `);
 }
 
 function configuredAppUrl(): URL {
@@ -111,7 +146,7 @@ async function resolveEnrollment(normalizedEmail: string): Promise<
     }
   | undefined
 > {
-  if (!isPlausibleEmail(normalizedEmail)) return undefined;
+  if (!isPlausibleAttorneyEmail(normalizedEmail)) return undefined;
 
   const matches = await db
     .select({
@@ -191,4 +226,26 @@ export async function consumeAttorneyToken(
   `);
 
   return result.rows.length === 1 ? result.rows[0] : null;
+}
+
+/** Read-only callback landing-page check; this never consumes the token. */
+export async function isAttorneyTokenAvailable(token: string): Promise<boolean> {
+  if (!TOKEN_PATTERN.test(token)) return false;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const result = await db.execute<{ available: boolean }>(sql`
+    select exists (
+      select 1
+        from "attorney_tokens" as token
+       where token."token_hash" = ${tokenHash}
+         and token."used_at" is null
+         and token."expires_at" > now()
+         and exists (
+           select 1
+             from "attorneys" as attorney
+            where attorney."id" = token."attorney_id"
+              and attorney."event_id" = token."event_id"
+         )
+    ) as "available"
+  `);
+  return result.rows[0]?.available === true;
 }

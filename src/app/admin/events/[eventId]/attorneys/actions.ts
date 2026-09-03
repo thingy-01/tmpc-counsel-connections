@@ -11,6 +11,7 @@ import {
   ORGANIZATION_TYPES,
   PRACTICE_AREAS,
   parsePracticeAreas,
+  practiceAreaEntriesEqual,
   serializePracticeAreas,
   type PracticeAreaEntry,
 } from "@/lib/practice-areas";
@@ -70,9 +71,10 @@ function parseAttorneyFields(
   const percentages = formData.getAll("practicePercent").map((value) =>
     String(value).trim()
   );
-  const existingAreas = new Set(
-    parsePracticeAreas(existing?.practiceAreas).entries.map((entry) => entry.area)
-  );
+  const existingPracticeAreas = parsePracticeAreas(
+    existing?.practiceAreas
+  ).entries;
+  const existingAreas = new Set(existingPracticeAreas.map((entry) => entry.area));
   const canonicalAreas = PRACTICE_AREAS as readonly string[];
   const practiceAreas: PracticeAreaEntry[] = [];
 
@@ -89,10 +91,8 @@ function parseAttorneyFields(
       };
     }
     if (!percentText) {
-      return {
-        error:
-          "Supply a percentage for each practice area. Percentages in a newly submitted edit must total 100%.",
-      };
+      practiceAreas.push({ area });
+      continue;
     }
     const percent = Number(percentText);
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
@@ -101,13 +101,24 @@ function parseAttorneyFields(
     practiceAreas.push({ area, percent });
   }
 
-  if (practiceAreas.length > 2) {
+  const practiceAreasUnchanged =
+    Boolean(existing) &&
+    practiceAreaEntriesEqual(practiceAreas, existingPracticeAreas);
+
+  if (!practiceAreasUnchanged && practiceAreas.some((entry) => entry.percent === undefined)) {
+    return {
+      error:
+        "Supply a percentage for each practice area. Percentages in a newly submitted edit must total 100%.",
+    };
+  }
+  if (!practiceAreasUnchanged && practiceAreas.length > 2) {
     return {
       error:
         "A newly submitted edit may contain at most two practice areas. Remove extra imported areas before saving.",
     };
   }
   if (
+    !practiceAreasUnchanged &&
     new Set(practiceAreas.map((entry) => entry.area.toLocaleLowerCase("en-US")))
       .size !== practiceAreas.length
   ) {
@@ -117,7 +128,11 @@ function parseAttorneyFields(
     (total, entry) => total + (entry.percent ?? 0),
     0
   );
-  if (practiceAreas.length > 0 && Math.abs(percentageTotal - 100) > 0.000001) {
+  if (
+    !practiceAreasUnchanged &&
+    practiceAreas.length > 0 &&
+    Math.abs(percentageTotal - 100) > 0.000001
+  ) {
     return {
       error:
         "Practice-area percentages in a newly submitted edit must total 100%.",
@@ -133,7 +148,9 @@ function parseAttorneyFields(
       phone: (formData.get("phone") as string)?.trim() || null,
       city: (formData.get("city") as string)?.trim() || null,
       organizationType: organizationType || null,
-      practiceAreas: serializePracticeAreas(practiceAreas),
+      ...(practiceAreasUnchanged
+        ? {}
+        : { practiceAreas: serializePracticeAreas(practiceAreas) }),
     },
   };
 }

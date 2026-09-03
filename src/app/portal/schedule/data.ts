@@ -29,6 +29,10 @@ export type CompanyScheduleAttorney = {
   status: "active" | "withdrawn";
   hasResume: boolean;
   unavailableSlotIds: string[];
+  contact?: {
+    email: string;
+    phone: string | null;
+  };
 };
 
 export type CompanyScheduleAssignment = {
@@ -37,6 +41,15 @@ export type CompanyScheduleAssignment = {
   timeSlotId: string;
   interviewerId: string | null;
 };
+
+export function assignedAttorneyContact(
+  attorney: { email: string; phone: string | null },
+  isAssignedToCompany: boolean
+): Pick<CompanyScheduleAttorney, "contact"> {
+  return isAssignedToCompany
+    ? { contact: { email: attorney.email, phone: attorney.phone } }
+    : {};
+}
 
 export type CompanyScheduleProjection = {
   company: {
@@ -68,8 +81,8 @@ export type CompanyScheduleProjection = {
 
 /**
  * The sole company schedule projection. It intentionally never returns staff
- * notes, unavailability reasons/row ids, other company identities, attorney
- * contact details, or raw resume storage fields.
+ * notes, unavailability reasons/row ids, other company identities, unassigned
+ * attorney contact details, or raw resume storage fields.
  */
 export async function getCompanyScheduleProjection(): Promise<
   CompanyScheduleProjection | null
@@ -116,6 +129,8 @@ export async function getCompanyScheduleProjection(): Promise<
           firstName: attorneys.firstName,
           lastName: attorneys.lastName,
           firm: attorneys.firm,
+          email: attorneys.email,
+          phone: attorneys.phone,
           city: attorneys.city,
           organizationType: attorneys.organizationType,
           practiceAreas: attorneys.practiceAreas,
@@ -221,6 +236,7 @@ export async function getCompanyScheduleProjection(): Promise<
       unavailableSlotIds: Array.from(
         unavailableByAttorney.get(attorney.id) ?? []
       ),
+      ...assignedAttorneyContact(attorney, ownAttorneyIds.has(attorney.id)),
     }));
 
   const days: CompanyScheduleProjection["days"] = [];

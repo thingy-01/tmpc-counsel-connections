@@ -4,6 +4,11 @@ import { attorneys, companies } from "@/lib/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { getDevAuth } from "@/lib/dev-auth";
 import { getAttorneySession, getCompanySessionId } from "@/lib/session";
+import {
+  configuredStaffOrganizationId,
+  hasStaffAdminMembership,
+  isActiveStaffAdmin,
+} from "@/lib/staff-authorization";
 
 export type UserRole = "admin" | "company" | null;
 
@@ -13,9 +18,6 @@ export type AttorneyIdentity = {
   eventId: string;
 };
 
-/** Clerk's built-in admin role key for organization members. */
-export const ADMIN_ORG_ROLE = "org:admin";
-
 /**
  * Clerk's auth(), but never throws — returns nulls if Clerk isn't configured
  * or its middleware didn't run (e.g. the company portal, which uses an
@@ -23,13 +25,18 @@ export const ADMIN_ORG_ROLE = "org:admin";
  */
 async function safeClerkAuth(): Promise<{
   userId: string | null;
+  orgId: string | null;
   orgRole: string | null;
 }> {
   try {
-    const { userId, orgRole } = await auth();
-    return { userId: userId ?? null, orgRole: orgRole ?? null };
+    const { userId, orgId, orgRole } = await auth();
+    return {
+      userId: userId ?? null,
+      orgId: orgId ?? null,
+      orgRole: orgRole ?? null,
+    };
   } catch {
-    return { userId: null, orgRole: null };
+    return { userId: null, orgId: null, orgRole: null };
   }
 }
 
@@ -41,12 +48,27 @@ async function safeClerkAuth(): Promise<{
  * list — a staff member is an admin no matter which org is active.
  */
 export async function isClerkAdmin(userId: string): Promise<boolean> {
+  const organizationId = configuredStaffOrganizationId();
+  if (!organizationId) return false;
+
   try {
     const client = await clerkClient();
-    const memberships = await client.users.getOrganizationMembershipList({
-      userId,
+    return hasStaffAdminMembership(organizationId, async ({ limit, offset }) => {
+      const page = await client.users.getOrganizationMembershipList({
+        userId,
+        limit,
+        offset,
+      });
+      return {
+        data: page.data.map((membership) => ({
+          role: membership.role,
+          organization: membership.organization
+            ? { id: membership.organization.id }
+            : null,
+        })),
+        totalCount: page.totalCount,
+      };
     });
-    return memberships.data.some((m) => m.role === ADMIN_ORG_ROLE);
   } catch {
     return false;
   }
@@ -63,8 +85,9 @@ export async function getRole(): Promise<UserRole> {
   const dev = getDevAuth();
   if (dev) return dev.role;
 
-  const { userId, orgRole } = await safeClerkAuth();
-  if (orgRole === ADMIN_ORG_ROLE) return "admin";
+  const { userId, orgId, orgRole } = await safeClerkAuth();
+  const organizationId = configuredStaffOrganizationId();
+  if (isActiveStaffAdmin({ orgId, orgRole }, organizationId)) return "admin";
   // Fallback for when the TMCP org isn't the active org in this session.
   if (userId && (await isClerkAdmin(userId))) return "admin";
 

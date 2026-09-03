@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export default async function AttorneyPortalPage() {
-  const identity = await getAttorneyIdentity();
+  let identity;
+  try {
+    identity = await getAttorneyIdentity();
+  } catch {
+    redirect("/attorney/login?error=unavailable");
+  }
   if (!identity) redirect("/attorney/login");
 
   return (

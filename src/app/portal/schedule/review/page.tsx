@@ -138,6 +138,14 @@ export default async function ScheduleReviewPage() {
                       {attorney.city && (
                         <p className="mt-1 text-sm text-slate-500">{attorney.city}</p>
                       )}
+                      {attorney.contact && (
+                        <p className="mt-1 text-sm text-slate-500">
+                          {attorney.contact.email}
+                          {attorney.contact.phone
+                            ? ` · ${attorney.contact.phone}`
+                            : ""}
+                        </p>
+                      )}
                       {attorney.practiceAreas.length > 0 && (
                         <p className="mt-1.5 text-xs text-slate-500">
                           {attorney.practiceAreas
