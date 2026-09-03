@@ -26,6 +26,7 @@ type Attorney = {
   isUnavailable: boolean | null;
   resumePath: string | null;
   resumeOriginalName: string | null;
+  resumeReferences: Array<{ url: string; label: string | null; status: string }>;
   assignmentCount: number;
   blocks: UnavailabilityBlock[];
 };

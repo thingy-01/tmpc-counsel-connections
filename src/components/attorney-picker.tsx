@@ -38,6 +38,7 @@ export type CompanyPickableAttorney = {
   practiceAreas: Array<{ area: string; percent: number | null }>;
   status: "active" | "withdrawn";
   hasResume: boolean;
+  resumeReferences: Array<{ url: string; label: string }>;
   unavailableSlotIds: string[];
 };
 
@@ -288,6 +289,16 @@ export function CompanyAttorneyPicker({
                   className="shrink-0 text-xs font-medium text-blue-600 hover:underline"
                 >
                   Resume
+                </a>
+              )}
+              {!attorney.hasResume && attorney.resumeReferences[0] && (
+                <a
+                  href={attorney.resumeReferences[0].url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Unverified external reference
                 </a>
               )}
             </div>

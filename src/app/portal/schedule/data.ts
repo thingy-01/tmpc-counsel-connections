@@ -7,6 +7,7 @@ import {
   assignments,
   attorneys,
   attorneyUnavailability,
+  attorneyResumeReferences,
   companies,
   companyInterviewers,
   eventDays,
@@ -17,6 +18,7 @@ import {
   publicPracticeAreas,
   type PublicPracticeArea,
 } from "./practice-display";
+import { buildCompanySafeAttorneys } from "@/lib/roster-import/company-safe-projection";
 
 export type CompanyScheduleAttorney = {
   id: string;
@@ -28,6 +30,7 @@ export type CompanyScheduleAttorney = {
   practiceAreas: PublicPracticeArea[];
   status: "active" | "withdrawn";
   hasResume: boolean;
+  resumeReferences: Array<{ url: string; label: string }>;
   unavailableSlotIds: string[];
   contact?: {
     email: string;
@@ -107,7 +110,7 @@ export async function getCompanyScheduleProjection(): Promise<
   const context = contexts[0];
   if (!context) return null;
 
-  const [rawSlots, rawAttorneys, rawBlocks, ownAssignments, otherBookings, interviewers] =
+  const [rawSlots, rawAttorneys, rawBlocks, ownAssignments, otherBookings, interviewers, rawReferences] =
     await Promise.all([
       db
         .select({
@@ -185,6 +188,21 @@ export async function getCompanyScheduleProjection(): Promise<
         .from(companyInterviewers)
         .where(eq(companyInterviewers.companyId, companyId))
         .orderBy(asc(companyInterviewers.name)),
+      db
+        .select({
+          attorneyId: attorneyResumeReferences.attorneyId,
+          url: attorneyResumeReferences.url,
+          label: attorneyResumeReferences.label,
+        })
+        .from(attorneyResumeReferences)
+        .innerJoin(attorneys, eq(attorneyResumeReferences.attorneyId, attorneys.id))
+        .where(
+          and(
+            eq(attorneys.eventId, context.eventId),
+            eq(attorneyResumeReferences.status, "unverified")
+          )
+        )
+        .orderBy(asc(attorneyResumeReferences.createdAt)),
     ]);
 
   const daySlots = new Map<string, string[]>();
@@ -218,26 +236,21 @@ export async function getCompanyScheduleProjection(): Promise<
 
   const ownAttorneyIds = new Set(ownAssignments.map((item) => item.attorneyId));
   const ownInterviewerIds = new Set(interviewers.map((item) => item.id));
-  const safeAttorneys: CompanyScheduleAttorney[] = rawAttorneys
-    .filter(
-      (attorney) =>
-        attorney.status !== "withdrawn" || ownAttorneyIds.has(attorney.id)
-    )
-    .map((attorney) => ({
-      id: attorney.id,
-      firstName: attorney.firstName,
-      lastName: attorney.lastName,
-      firm: attorney.firm,
-      city: attorney.city,
-      organizationType: attorney.organizationType,
+  const referencesByAttorney = new Map<string, Array<{ url: string; label: string }>>();
+  for (const reference of rawReferences) {
+    const list = referencesByAttorney.get(reference.attorneyId) ?? [];
+    list.push({ url: reference.url, label: reference.label ?? "Unverified external reference" });
+    referencesByAttorney.set(reference.attorneyId, list);
+  }
+  const safeAttorneys: CompanyScheduleAttorney[] = buildCompanySafeAttorneys(
+    rawAttorneys.map((attorney) => ({
+      ...attorney,
       practiceAreas: publicPracticeAreas(attorney.practiceAreas),
-      status: attorney.status === "withdrawn" ? "withdrawn" : "active",
-      hasResume: attorney.hasResume,
-      unavailableSlotIds: Array.from(
-        unavailableByAttorney.get(attorney.id) ?? []
-      ),
-      ...assignedAttorneyContact(attorney, ownAttorneyIds.has(attorney.id)),
-    }));
+    })),
+    ownAttorneyIds,
+    unavailableByAttorney,
+    referencesByAttorney
+  );
 
   const days: CompanyScheduleProjection["days"] = [];
   for (const slot of rawSlots) {

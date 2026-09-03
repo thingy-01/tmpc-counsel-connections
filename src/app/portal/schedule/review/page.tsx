@@ -175,6 +175,16 @@ export default async function ScheduleReviewPage() {
                             View Resume (PDF)
                           </a>
                         )}
+                        {!attorney.hasResume && attorney.resumeReferences[0] && (
+                          <a
+                            href={attorney.resumeReferences[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-600 hover:underline print:hidden"
+                          >
+                            Unverified external reference
+                          </a>
+                        )}
                       </div>
 
                       {day.format === "virtual" && (

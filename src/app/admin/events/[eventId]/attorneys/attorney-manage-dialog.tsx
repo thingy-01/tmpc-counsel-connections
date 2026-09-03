@@ -35,6 +35,7 @@ export type ManageableAttorney = {
   status: string;
   resumePath: string | null;
   resumeOriginalName: string | null;
+  resumeReferences: Array<{ url: string; label: string | null; status: string }>;
   assignmentCount: number;
   blocks: UnavailabilityBlock[];
 };
@@ -313,6 +314,27 @@ export default function AttorneyManageDialog({
               </Button>
             </form>
             <p className="mt-1 text-xs text-slate-400">PDF only, up to 10 MB.</p>
+            {attorney.resumeReferences.length > 0 && (
+              <div className="mt-4 rounded-md border border-slate-200 p-3">
+                <p className="text-xs font-semibold text-slate-700">External resume references (read-only)</p>
+                <ul className="mt-2 space-y-1">
+                  {attorney.resumeReferences.map((reference) => (
+                    <li key={reference.url}>
+                      <a
+                        href={reference.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        {reference.label ?? "Unverified external reference"}
+                      </a>
+                      <span className="ml-2 text-xs text-slate-400">{reference.status}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-amber-700">These links were not fetched or verified by the server.</p>
+              </div>
+            )}
           </section>
 
           {/* Delete */}

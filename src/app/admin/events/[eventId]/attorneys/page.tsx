@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import {
   assignments,
   attorneys,
+  attorneyResumeReferences,
   attorneyUnavailability,
   eventDays,
   events,
@@ -32,7 +33,7 @@ export default async function AttorneysPage({
   const slotDay = alias(eventDays, "slot_day");
   const dayDirect = alias(eventDays, "day_direct");
 
-  const [event, attorneyList, days, slotRows, blockRows, assignmentCounts] = await Promise.all([
+  const [event, attorneyList, days, slotRows, blockRows, assignmentCounts, referenceRows] = await Promise.all([
     db.query.events.findFirst({ where: eq(events.id, eventId) }),
     db
       .select({
@@ -95,6 +96,17 @@ export default async function AttorneysPage({
       .innerJoin(attorneys, eq(assignments.attorneyId, attorneys.id))
       .where(eq(attorneys.eventId, eventId))
       .groupBy(assignments.attorneyId),
+    db
+      .select({
+        attorneyId: attorneyResumeReferences.attorneyId,
+        url: attorneyResumeReferences.url,
+        label: attorneyResumeReferences.label,
+        status: attorneyResumeReferences.status,
+      })
+      .from(attorneyResumeReferences)
+      .innerJoin(attorneys, eq(attorneyResumeReferences.attorneyId, attorneys.id))
+      .where(eq(attorneys.eventId, eventId))
+      .orderBy(asc(attorneyResumeReferences.createdAt)),
   ]);
 
   if (!event) notFound();
@@ -121,11 +133,18 @@ export default async function AttorneysPage({
   const countByAttorney = new Map(
     assignmentCounts.map((r) => [r.attorneyId, r.count])
   );
+  const referencesByAttorney = new Map<string, Array<{ url: string; label: string | null; status: string }>>();
+  for (const reference of referenceRows) {
+    const list = referencesByAttorney.get(reference.attorneyId) ?? [];
+    list.push({ url: reference.url, label: reference.label, status: reference.status });
+    referencesByAttorney.set(reference.attorneyId, list);
+  }
 
   const enriched = attorneyList.map((a) => ({
     ...a,
     blocks: blocksByAttorney.get(a.id) ?? [],
     assignmentCount: countByAttorney.get(a.id) ?? 0,
+    resumeReferences: referencesByAttorney.get(a.id) ?? [],
   }));
 
   const slots = slotRows.map((s) => ({
