@@ -110,7 +110,10 @@ export async function addInterviewer(formData: FormData) {
 export async function updateInterviewer(
   formData: FormData
 ): Promise<InterviewerActionResult> {
-  const companyId = await requireCompanyId();
+  const companyId = await getCompanyId();
+  if (!companyId) {
+    return { ok: false, error: "Your company session has expired." };
+  }
   const eventId = await openSchedulingEventId(companyId);
   if (!eventId) {
     return { ok: false, error: "Scheduling is closed for this event." };

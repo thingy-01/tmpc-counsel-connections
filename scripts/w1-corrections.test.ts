@@ -309,6 +309,69 @@ test("attorney POST policy accepts the browser no-referrer form shape", async ()
   assert.equal(response.status, 403);
 });
 
+test("production POST policy uses the configured public origin behind a proxy", async () => {
+  const { isSameOriginRequest } = await import("../src/lib/same-origin");
+  const environment = process.env as Record<string, string | undefined>;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  environment.NODE_ENV = "production";
+  environment.NEXT_PUBLIC_APP_URL = "https://counsel.example/public-path";
+  try {
+    const internalUrl = "http://internal.service:3000/attorney/logout";
+    assert.equal(
+      isSameOriginRequest(
+        new Request(internalUrl, {
+          method: "POST",
+          headers: { origin: "https://counsel.example" },
+        })
+      ),
+      true
+    );
+    assert.equal(
+      isSameOriginRequest(
+        new Request(internalUrl, {
+          method: "POST",
+          headers: { origin: "http://internal.service:3000" },
+        })
+      ),
+      false
+    );
+    environment.NEXT_PUBLIC_APP_URL = "http://counsel.example";
+    assert.equal(
+      isSameOriginRequest(
+        new Request(internalUrl, {
+          method: "POST",
+          headers: { origin: "http://counsel.example" },
+        })
+      ),
+      false
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete environment.NODE_ENV;
+    else environment.NODE_ENV = previousNodeEnv;
+    if (previousAppUrl === undefined) delete environment.NEXT_PUBLIC_APP_URL;
+    else environment.NEXT_PUBLIC_APP_URL = previousAppUrl;
+  }
+});
+
+test("interviewer update returns an expired-session result", async () => {
+  const previousDevAuth = process.env.DEV_AUTH;
+  process.env.DEV_AUTH = "admin";
+  try {
+    const actions = await import("../src/app/portal/interviewers/actions");
+    const form = new FormData();
+    form.set("id", randomUUID());
+    form.set("name", "Synthetic interviewer");
+    assert.deepEqual(await actions.updateInterviewer(form), {
+      ok: false,
+      error: "Your company session has expired.",
+    });
+  } finally {
+    if (previousDevAuth === undefined) delete process.env.DEV_AUTH;
+    else process.env.DEV_AUTH = previousDevAuth;
+  }
+});
+
 test("misconfigured production attorney callback fails closed without a 500", async () => {
   const callback = await import("../src/app/attorney/callback/route");
   const mutableEnvironment = process.env as Record<string, string | undefined>;
