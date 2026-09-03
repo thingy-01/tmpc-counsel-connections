@@ -354,6 +354,35 @@ test("production POST policy uses the configured public origin behind a proxy", 
   }
 });
 
+test("magic-link request redirects away from Railway's internal origin", async () => {
+  const mutableEnvironment = process.env as Record<string, string | undefined>;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  mutableEnvironment.NODE_ENV = "production";
+  mutableEnvironment.NEXT_PUBLIC_APP_URL = "https://counsel-connections.org";
+  try {
+    const requestRoute = await import(
+      "../src/app/attorney/login/request/route"
+    );
+    const response = await requestRoute.POST(
+      new Request("https://localhost:8080/attorney/login/request", {
+        method: "POST",
+        body: new URLSearchParams({ email: "invalid" }),
+      })
+    );
+    assert.equal(response.status, 303);
+    assert.equal(
+      response.headers.get("location"),
+      "https://counsel-connections.org/attorney/login?sent=1"
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete mutableEnvironment.NODE_ENV;
+    else mutableEnvironment.NODE_ENV = previousNodeEnv;
+    if (previousAppUrl === undefined) delete mutableEnvironment.NEXT_PUBLIC_APP_URL;
+    else mutableEnvironment.NEXT_PUBLIC_APP_URL = previousAppUrl;
+  }
+});
+
 test("interviewer update returns an expired-session result", async () => {
   const previousDevAuth = process.env.DEV_AUTH;
   process.env.DEV_AUTH = "admin";
@@ -377,11 +406,13 @@ test("misconfigured production attorney callback fails closed without a 500", as
   const mutableEnvironment = process.env as Record<string, string | undefined>;
   const previousNodeEnv = process.env.NODE_ENV;
   const previousSecret = process.env.ATTORNEY_SESSION_SECRET;
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   mutableEnvironment.NODE_ENV = "production";
+  mutableEnvironment.NEXT_PUBLIC_APP_URL = "https://counsel.example";
   delete mutableEnvironment.ATTORNEY_SESSION_SECRET;
   try {
     const response = await callback.GET(
-      new Request("https://counsel.example/attorney/callback?token=invalid")
+      new Request("https://localhost:8080/attorney/callback?token=invalid")
     );
     assert.equal(response.status, 303);
     assert.equal(
@@ -393,6 +424,8 @@ test("misconfigured production attorney callback fails closed without a 500", as
     else mutableEnvironment.NODE_ENV = previousNodeEnv;
     if (previousSecret === undefined) delete mutableEnvironment.ATTORNEY_SESSION_SECRET;
     else mutableEnvironment.ATTORNEY_SESSION_SECRET = previousSecret;
+    if (previousAppUrl === undefined) delete mutableEnvironment.NEXT_PUBLIC_APP_URL;
+    else mutableEnvironment.NEXT_PUBLIC_APP_URL = previousAppUrl;
   }
 });
 

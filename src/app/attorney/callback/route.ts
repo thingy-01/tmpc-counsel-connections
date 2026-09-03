@@ -8,6 +8,7 @@ import {
   setAttorneySession,
 } from "@/lib/session";
 import { isSameOriginRequest } from "@/lib/same-origin";
+import { publicAppUrl } from "@/lib/public-app-url";
 
 const PRIVATE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -19,7 +20,7 @@ const PRIVATE_HEADERS = {
 
 function redirectToLogin(request: Request, error: "invalid" | "unavailable") {
   return NextResponse.redirect(
-    new URL(`/attorney/login?error=${error}`, request.url),
+    publicAppUrl(request, `/attorney/login?error=${error}`),
     { status: 303, headers: PRIVATE_HEADERS }
   );
 }
@@ -109,7 +110,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   } catch {
     return redirectToLogin(request, "unavailable");
   }
-  return NextResponse.redirect(new URL("/attorney", request.url), {
+  return NextResponse.redirect(publicAppUrl(request, "/attorney"), {
     status: 303,
     headers: PRIVATE_HEADERS,
   });

@@ -7,10 +7,11 @@ import {
   normalizeAttorneyEmail,
 } from "../../auth";
 import { logAttorneyAuthFailure } from "../../safe-logging";
+import { publicAppUrl } from "@/lib/public-app-url";
 
 function genericResponse(request: Request): NextResponse {
   return NextResponse.redirect(
-    new URL("/attorney/login?sent=1", request.url),
+    publicAppUrl(request, "/attorney/login?sent=1"),
     303
   );
 }
