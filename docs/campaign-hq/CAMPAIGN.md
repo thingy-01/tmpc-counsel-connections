@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. Railway deployment `5a3049f4-e9fd-4ce3-bb73-fe9a66398ac1` successfully promoted application commit `c45742b6d5a2677e228fce572852453ddaeb7a27` after the production email configuration and additive migrations were verified.
+Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `8ae34bfe-d3a4-4004-8fbe-1100ebd5fe81`, successfully promoted commit `f70d8c2d61f5d045028b13380c82e18feb14d741` with the company profile completion gate.
 
 ## Release candidate
 
@@ -35,6 +35,16 @@ The integrated release includes:
 ## Release result
 
 The approved campaign scope is live. Notification batches remain unsent until a staff operator previews and explicitly authorizes a batch in the application. The preserved pre-migration archive and prior Railway revision remain available as rollback evidence.
+
+## Company profile completion follow-up
+
+- Incomplete companies now go to `/portal/profile?onboarding=1` after login.
+- Direct visits to company home, interviewer management, scheduling, and schedule review also redirect incomplete companies to the profile.
+- The profile page explains that the primary contact name and email must be saved before the remaining portal features become available.
+- The portal navigation shows only Company Profile until the required contact fields are complete.
+- Completed companies keep the existing schedule destination and full portal navigation.
+- CodeRabbit reported no findings. All 56 tests, strict TypeScript, ESLint, the production build, and synthetic browser acceptance passed.
+- Railway deployment `8ae34bfe-d3a4-4004-8fbe-1100ebd5fe81` succeeded for `f70d8c2d61f5d045028b13380c82e18feb14d741`. Live portal routes returned 200 with no observed deployment 5xx responses.
 
 ## Runtime status
 
