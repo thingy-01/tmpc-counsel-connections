@@ -27,3 +27,6 @@
   before any model execution, because `verify_result` lacked `additionalProperties:false`.
   The conductor read head logs, saw `thread.started`, and recorded false progress.
 - September 3, 2026: approved implementation plan and live release; parent preserves earlier checkout/worktrees.
+
+- September 3: Claude print-mode exited after a progress report and killed its background workers. Root preserved edits and resumed worker sessions directly. Live process and terminal result checks are mandatory; a started job is not proof of ongoing work.
+- September 3: XLSX percentages use fractional numbers with 0% format; legacy seed stores 0.5 for50%. Normalize meaning without inventing missing data.

@@ -1,10 +1,10 @@
 # Campaign: Counsel Connections September feedback
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
-Status: phase 1 of 4, Wave 1 attempt 2 running.
+Status: phase 1 of 4, Wave 1 resumed under direct root process supervision.
 
 ## Progress pulse
 - Reporting interval: concise root updates within 60 seconds during active work; substantive phase reports and at least every 15 minutes.
-- Last user report: Wave 1 attempt 2 dispatched, September 3, 2026.
+- Last user report: worker lifecycle interruption explained; all edits preserved and workers resumed, 2026-09-03T16:22:21.191912+00:00.
 - Automatic continuation: active; implementation and live release already approved.
 
 ## Wave 1 attempt 1: FAILED, no code produced
@@ -24,10 +24,10 @@ branches from `campaign/w1*` to `codex/w1*`, and replaced the conductor runtime.
 | Task | Worker | Branch | Worktree | Session | Dispatched | Status |
 |---|---|---|---|---|---|---|
 | Release preflight/local DB | Codex native agent release_preflight | none (scratch only) | work/release-preflight | /root/release_preflight | 2026-09-03 | complete; report at work/release-preflight/report.md |
-| Implementation conductor | Claude Opus 5, high | codex/counsel-connections-dev | task root | current session | 2026-09-03 | active |
-| W1A: Onboarding/practice | Codex CLI | codex/w1a-onboarding | work/trees/w1a-onboarding | attempt 2 | 2026-09-03 | running; log work/w1a-log.jsonl |
-| W1B: Attorney auth | Codex CLI | codex/w1b-attorney-auth | work/trees/w1b-attorney-auth | attempt 2 | 2026-09-03 | running; log work/w1b-log.jsonl |
-| W1C: Company scheduling | Codex CLI | codex/w1c-scheduling | work/trees/w1c-scheduling | attempt 2 | 2026-09-03 | running; log work/w1c-log.jsonl |
+| Design/review conductor | Claude Opus 5, high | codex/counsel-connections-dev | task root | 72df8991-0ed1-47a9-a994-27fbdbf663ed | 2026-09-03 | bounded invocations; not currently running |
+| W1A: Onboarding/practice | Codex CLI | codex/w1a-onboarding | work/trees/w1a-onboarding | 01a06808-b314-72d2-8aa0-0bb261bdad29 | 2026-09-03 | resumed; direct exec 5933; log work/w1a-resume.jsonl |
+| W1B: Attorney auth | Codex CLI | codex/w1b-attorney-auth | work/trees/w1b-attorney-auth | 01a06808-bb43-79e1-888c-da5296b35179 | 2026-09-03 | resumed; direct exec 12860; log work/w1b-resume.jsonl |
+| W1C: Company scheduling | Codex CLI | codex/w1c-scheduling | work/trees/w1c-scheduling | 01a06808-c5de-71a1-aeed-4d771b4be803 | 2026-09-03 | resumed; direct exec 76271; log work/w1c-resume.jsonl |
 
 Collection rule: read the log **tail** and the exit-status file, never the head. A
 `thread.started` line is not evidence of success.
@@ -47,4 +47,13 @@ Repository: thingy-01/tmpc-counsel-connections. Baseline: 93d1a0375945ca969f67c8
 Railway: Counsel project 1adb346c-6acd-4d7e-92db-c09559b4bc14; production env 8f8dd39e-2b89-4bf4-873e-3ac3dd8ec92c; tmcp-interviews service f4badb5d-40ac-4ce1-95d1-9e406bd60d3c. Root must verify preflight report before release. Inherited Railway linkage points to Jurytics and must never be used.
 
 ## Coordination
-Root coordinator owns release preflight, production configuration, release, and user communication. Claude conductor owns campaign implementation/docs, worker dispatch, local integration/review. Check work/ROOT-STEERING.md for new coordination instructions before each phase.
+Root coordinator owns release preflight, production configuration, release, and user communication. Root directly supervises worker processes, campaign state, and mechanical integration. Claude Opus provides bounded design and separate-author review. No Claude print-mode invocation owns long-lived background workers. Check work/ROOT-STEERING.md for new coordination instructions before each phase.
+
+## Wave 1 process interruption and recovery
+The Opus5 print-mode conductor returned a status report and exited0 at 16:13:42Z. Its CLI killed all background Bash workers and the waiter. Partial edits survived, with no worker final reports/commits. Root verified status:killed events and absent processes, then resumed the same Codex sessions via direct exec. This is lifecycle recovery, not a permission bypass. All source preserved.
+
+## Verified release preparation
+- Private full backup restored into separate local counsel_connections_restore_check database; 11 tables, current counts and uniqueness constraints preserved. Evidence under work/release-preflight.
+- Actual installed Neon HTTP driver passed a read-only production SELECT1; execute() returns object.rows.
+- Full production email configuration remains unresolved; user was asked provider/sender details asynchronously.
+- Jen/Tracy names are unidentified meeting references, per user's clarification; leave current staff memberships unchanged. This does not block feature implementation.

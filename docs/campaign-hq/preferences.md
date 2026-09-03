@@ -10,3 +10,5 @@
 - Continue autonomously. User already approved plan; do not repeat approval gates for ordinary code, tests, Git pushes, or live deployment. Do not send participant notifications during rollout.
 
 - Active Claude executable: /Users/thingy/Library/Application Support/Claude/claude-code/2.1.255/claude.app/Contents/MacOS/claude. Verified --model opus resolves to claude-opus-5; use --effort high. Legacy PATH Claude 2.1.7 resolved to Opus 4.5 and was stopped before feature writes.
+
+- Lifecycle rule: root launches Codex CLI workers as direct exec sessions. Claude print-mode background Bash jobs are killed when the conductor returns a status report; use Claude for bounded design/review instead. No new Codex app tasks.
