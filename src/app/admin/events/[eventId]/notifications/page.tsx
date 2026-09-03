@@ -151,9 +151,14 @@ export default async function NotificationsPage({
           const audienceLabel = AUDIENCE_OPTIONS.find(
             (option) => option.kind === audience.kind
           )?.label;
-          const retryable = batchRecipients.some(
-            (recipient) => recipient.status === "failed" && recipient.attempts < 3
-          );
+          const retryable =
+            ["authorized", "sending", "partial"].includes(batch.status) &&
+            batchRecipients.some(
+              (recipient) =>
+                recipient.status === "pending" ||
+                recipient.status === "sending" ||
+                (recipient.status === "failed" && recipient.attempts < 3)
+            );
           const canAuthorize =
             batch.status === "previewed" && batchRecipients.length > 0;
           return (

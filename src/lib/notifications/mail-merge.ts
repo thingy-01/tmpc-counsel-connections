@@ -26,7 +26,6 @@ export type MailMergeInterview = {
   companyName: string;
   interviewerName: string | null;
   preferredPlatform: string | null;
-  notes: string | null;
 };
 
 export type MailMergeAttorney = {
@@ -93,7 +92,6 @@ function interviewCells(interview: MailMergeInterview): string[] {
     interview.preferredPlatform
       ? `Platform: ${titleCase(interview.preferredPlatform)}`
       : null,
-    interview.notes,
   ]
     .filter(Boolean)
     .join("; ");

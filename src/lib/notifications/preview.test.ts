@@ -24,7 +24,6 @@ function attorney(overrides: Partial<AudienceAttorney> = {}): AudienceAttorney {
         companyName: "Example Company",
         interviewerName: "Jordan Lee",
         preferredPlatform: "zoom",
-        notes: null,
       },
     ],
     ...overrides,

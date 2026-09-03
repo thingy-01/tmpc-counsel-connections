@@ -7,6 +7,7 @@ import {
 } from "@/lib/roster-import/service";
 import type { ApplyDecision, ColumnMapping, PercentFormat } from "@/lib/roster-import/types";
 import { inspectWorkbook } from "@/lib/roster-import/workbook";
+import { staffActorId } from "@/lib/staff-actor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,9 +116,10 @@ export async function POST(
       companion = inspectWorkbook(await bytes(companionFile), companionFile, { allSheets: true });
       companionMapping = parseJsonField<ColumnMapping>(form, "companionMapping");
     }
+    const actorId = await staffActorId();
     const result = await stageRosterPreview({
       eventId,
-      uploadedBy: "verified-admin-session",
+      uploadedBy: actorId,
       filename: rosterFile.name,
       fileBytes: rosterBytes,
       inspection,

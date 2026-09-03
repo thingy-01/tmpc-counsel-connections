@@ -25,7 +25,6 @@ function fixture(interviewCount: number): MailMergeAttorney {
         index === 0 ? '=HYPERLINK("http://evil.test","x")' : `Company ${index + 1}`,
       interviewerName: index === 0 ? "+1+1" : `Interviewer ${index + 1}`,
       preferredPlatform: "zoom",
-      notes: null,
     })),
   };
 }

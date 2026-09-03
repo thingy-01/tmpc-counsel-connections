@@ -12,6 +12,7 @@ test(
     const result = spawnSync(
       process.execPath,
       [
+        "--experimental-test-module-mocks",
         "--import",
         "tsx",
         "src/lib/notifications/service.integration-fixture.ts",

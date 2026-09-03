@@ -5,20 +5,9 @@ import { companies } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { setCompanySession, clearCompanySession } from "@/lib/session";
+import { isCompanyProfileComplete } from "@/lib/company-profile";
 
 export type LoginResult = { ok: boolean; error?: string };
-
-type CompanyProfileContact = {
-  contactName: string | null | undefined;
-  contactEmail: string | null | undefined;
-};
-
-/** The single onboarding-completeness rule shared by login and portal UI. */
-export async function isCompanyProfileComplete(
-  company: CompanyProfileContact
-): Promise<boolean> {
-  return Boolean(company.contactName?.trim() && company.contactEmail?.trim());
-}
 
 /**
  * Email-free company login. The company enters the invite code TMCP issued
@@ -57,7 +46,7 @@ export async function loginCompany(
   }
 
   redirect(
-    (await isCompanyProfileComplete(company))
+    isCompanyProfileComplete(company)
       ? "/portal/schedule"
       : "/portal/profile"
   );

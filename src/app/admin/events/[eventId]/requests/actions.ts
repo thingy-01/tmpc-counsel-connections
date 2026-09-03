@@ -1,12 +1,11 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getRole } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { attorneyRescheduleRequests } from "@/lib/db/schema";
-import { getDevAuth } from "@/lib/dev-auth";
+import { staffActorId } from "@/lib/staff-actor";
 import {
   canTransitionRescheduleRequest,
   effectiveRescheduleStatus,
@@ -21,13 +20,6 @@ export type StaffRequestActionResult = {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function staffActorId(): Promise<string> {
-  if (getDevAuth()?.role === "admin") return "development-staff";
-  const { userId } = await auth();
-  if (!userId) throw new Error("Authenticated staff identity required.");
-  return userId;
-}
 
 export async function transitionStaffRequest(
   _previous: StaffRequestActionResult,

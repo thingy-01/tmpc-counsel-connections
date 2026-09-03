@@ -19,7 +19,14 @@ export type StaffMembershipPage = {
 };
 
 export function configuredStaffOrganizationId(): string | null {
-  return process.env.CLERK_ADMIN_ORG_ID?.trim() || null;
+  const organizationId = process.env.CLERK_ADMIN_ORG_ID?.trim();
+  if (organizationId) return organizationId;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CLERK_ADMIN_ORG_ID is not set. Staff authorization is disabled."
+    );
+  }
+  return null;
 }
 
 export function isActiveStaffAdmin(

@@ -508,6 +508,7 @@ export const notificationRecipients = pgTable(
     providerIdempotencyKey: text("provider_idempotency_key").notNull(),
     status: text("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
+    sendClaimedAt: timestamp("send_claimed_at", { withTimezone: true }),
     lastError: text("last_error"),
     providerMessageId: text("provider_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }),

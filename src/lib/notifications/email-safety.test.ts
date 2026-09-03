@@ -66,10 +66,16 @@ test("Resend plumbing forwards the stable idempotency key and provider id", () =
     if (seenKey !== "stable-provider-key" || result.messageId !== "provider-message-id") process.exit(2);
     globalThis.fetch = async () => new Response(JSON.stringify({name:"invalid_idempotent_request"}), {status:409,headers:{"Content-Type":"application/json"}});
     try { await transport.send(message); process.exit(3); }
-    catch (error) { if (error.retryable !== false) process.exit(4); }
+    catch (error) { if (error.retryable !== false || error.scope !== "system") process.exit(4); }
     globalThis.fetch = async () => new Response(JSON.stringify({name:"concurrent_idempotent_requests"}), {status:409,headers:{"Content-Type":"application/json"}});
     try { await transport.send(message); process.exit(5); }
-    catch (error) { if (error.retryable !== true) process.exit(6); }
+    catch (error) { if (error.retryable !== true || error.scope !== "system") process.exit(6); }
+    globalThis.fetch = async () => new Response("", {status:403});
+    try { await transport.send(message); process.exit(7); }
+    catch (error) { if (error.retryable !== false || error.scope !== "system") process.exit(8); }
+    globalThis.fetch = async () => { throw new Error("network unavailable"); };
+    try { await transport.send(message); process.exit(9); }
+    catch (error) { if (error.retryable !== true || error.scope !== "system") process.exit(10); }
   `;
   const result = spawnSync(
     process.execPath,

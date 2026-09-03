@@ -33,7 +33,6 @@ export function renderSchedule(schedule: AudienceAttorney["schedule"]): string {
         item.dayFormat === "virtual" && item.preferredPlatform
           ? `Platform: ${titleCase(item.preferredPlatform)}`
           : null,
-        item.notes ? `Notes: ${item.notes}` : null,
       ].filter(Boolean);
       return details.join("\n");
     })

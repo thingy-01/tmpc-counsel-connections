@@ -13,6 +13,7 @@ import {
   eventDays,
   events,
   rosterImportCandidates,
+  rosterImportRows,
   timeSlots,
 } from "@/lib/db/schema";
 import { applyRosterImport, correctRosterPreview, stageRosterPreview } from "./service";
@@ -111,6 +112,116 @@ test("database apply is idempotent and preserves schedule, status, unavailabilit
 
   const second = await applyRosterImport({ eventId, importId: preview.importId, decisions: [{ candidateId: preview.candidates[0].candidateId, decision: "update" }] });
   assert.deepEqual(second, { created: 0, updated: 0, unchanged: 1, skipped: 0, raced: 0, failed: 0 });
+});
+
+test("unmapped optional fields survive updates while a mapped blank clears", { skip: !databaseEnabled }, async (t) => {
+  requireLocalTestDatabase();
+  const [event] = await db.insert(events).values({
+    name: "Synthetic optional-field preservation",
+    startDate: "2031-03-01",
+    endDate: "2031-03-01",
+    status: "draft",
+  }).returning({ id: events.id });
+  t.after(async () => { await db.delete(events).where(eq(events.id, event.id)); });
+  const [existing] = await db.insert(attorneys).values({
+    eventId: event.id,
+    firstName: "Taylor",
+    lastName: "Optional",
+    email: "taylor.optional@example.test",
+    firm: "Optional LLP",
+    city: "Austin",
+    organizationType: "Law Firm",
+    partnerCount: 8,
+    associateCount: 12,
+    ofCounselCount: 3,
+    practiceAreas: [{ area: "Taxation", percent: 1 }],
+  }).returning({ id: attorneys.id });
+  const omittedMapping: ColumnMapping = {
+    firstName: "First",
+    lastName: "Last",
+    email: "Email",
+    firm: "Firm",
+    practiceArea: "Area",
+    percent: "Percent",
+  };
+  const omitted = await stageRosterPreview({
+    eventId: event.id,
+    uploadedBy: "test-admin",
+    filename: "omitted.csv",
+    fileBytes: Buffer.from("omitted"),
+    inspection: inspection([row({ first: "Taylor", last: "Optional", email: "taylor.optional@example.test", firm: "Optional LLP", percent: 100 })]),
+    mapping: omittedMapping,
+    percentFormat: "whole",
+    companion: null,
+    companionMapping: null,
+  });
+  const unchanged = await applyRosterImport({
+    eventId: event.id,
+    importId: omitted.importId,
+    decisions: [{ candidateId: omitted.candidates[0].candidateId, decision: "update" }],
+  });
+  assert.equal(unchanged.unchanged, 1);
+
+  const mappedBlank = await stageRosterPreview({
+    eventId: event.id,
+    uploadedBy: "test-admin",
+    filename: "mapped-blank.csv",
+    fileBytes: Buffer.from("mapped-blank"),
+    inspection: inspection([row({ first: "Taylor", last: "Optional", email: "taylor.optional@example.test", firm: "Optional LLP", city: "", percent: 100 })]),
+    mapping: { ...omittedMapping, city: "City" },
+    percentFormat: "whole",
+    companion: null,
+    companionMapping: null,
+  });
+  const updated = await applyRosterImport({
+    eventId: event.id,
+    importId: mappedBlank.importId,
+    decisions: [{ candidateId: mappedBlank.candidates[0].candidateId, decision: "update" }],
+  });
+  assert.equal(updated.updated, 1);
+  const [after] = await db.select().from(attorneys).where(eq(attorneys.id, existing.id));
+  assert.equal(after.city, null);
+  assert.equal(after.organizationType, "Law Firm");
+  assert.equal(after.partnerCount, 8);
+  assert.equal(after.associateCount, 12);
+  assert.equal(after.ofCounselCount, 3);
+});
+
+test("roster preview persists candidates and raw rows across bounded batches", { skip: !databaseEnabled }, async (t) => {
+  requireLocalTestDatabase();
+  const [event] = await db.insert(events).values({
+    name: "Synthetic chunked preview",
+    startDate: "2031-04-01",
+    endDate: "2031-04-01",
+    status: "draft",
+  }).returning({ id: events.id });
+  t.after(async () => { await db.delete(events).where(eq(events.id, event.id)); });
+  const sourceRows = Array.from({ length: 251 }, (_, index) => row({
+    first: `First${index}`,
+    last: `Last${index}`,
+    email: `chunk-${index}@example.test`,
+    firm: `Firm ${index}`,
+    city: "Austin",
+    percent: 100,
+  }));
+  const preview = await stageRosterPreview({
+    eventId: event.id,
+    uploadedBy: "test-admin",
+    filename: "chunked.csv",
+    fileBytes: Buffer.from("chunked"),
+    inspection: inspection(sourceRows),
+    mapping,
+    percentFormat: "whole",
+    companion: null,
+    companionMapping: null,
+  });
+  assert.equal(preview.candidates.length, 251);
+  const persistedRows = await db
+    .select({ id: rosterImportRows.id, candidateId: rosterImportRows.candidateId })
+    .from(rosterImportRows)
+    .where(eq(rosterImportRows.importId, preview.importId));
+  assert.equal(persistedRows.length, 251);
+  assert.ok(persistedRows.every((persisted) => persisted.candidateId));
 });
 
 test("missing email correction, forged candidate, and stale preview are refused before unsafe writes", { skip: !databaseEnabled }, async (t) => {

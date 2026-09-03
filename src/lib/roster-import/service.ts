@@ -25,6 +25,24 @@ import type { WorkbookInspection } from "./workbook";
 
 type StoredCandidateParsed = ValidatedCandidate["parsed"];
 
+const PERSISTENCE_BATCH_SIZE = 250;
+
+function batchesOf<T>(items: T[]): T[][] {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += PERSISTENCE_BATCH_SIZE) {
+    batches.push(items.slice(index, index + PERSISTENCE_BATCH_SIZE));
+  }
+  return batches;
+}
+
+function resultRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (result && typeof result === "object" && "rows" in result) {
+    return (result as { rows: T[] }).rows;
+  }
+  return [];
+}
+
 export type PreviewResponse = {
   importId: string;
   candidates: Array<ValidatedCandidate & { candidateId: string }>;
@@ -94,53 +112,60 @@ function requireCoreMapping(mapping: ColumnMapping): void {
 
 async function writePreviewCandidates(
   importId: string,
-  candidates: ValidatedCandidate[],
-  existingIds?: Map<string, string>
+  candidates: ValidatedCandidate[]
 ): Promise<Array<ValidatedCandidate & { candidateId: string }>> {
-  const output: Array<ValidatedCandidate & { candidateId: string }> = [];
-  for (const candidate of candidates) {
-    const existingId = existingIds?.get(candidate.identityKey);
-    let id = existingId;
-    if (existingId) {
-      await db
-        .update(rosterImportCandidates)
-        .set({
-          parsed: candidate.parsed,
-          joinedEmail: candidate.joinedEmail,
-          emailSource: candidate.emailSource,
-          resolvedEmail: candidate.resolvedEmail,
-          matchAttorneyId: candidate.matchAttorneyId,
-          matchMethod: candidate.matchMethod,
-          resolution: candidate.resolution,
-          issues: candidate.issues,
-          appliedAction: null,
-          appliedAttorneyId: null,
-          appliedError: null,
-          appliedAt: null,
-        })
-        .where(and(eq(rosterImportCandidates.id, existingId), eq(rosterImportCandidates.importId, importId)));
-    } else {
-      const inserted = await db
-        .insert(rosterImportCandidates)
-        .values({
-          importId,
-          identityKey: candidate.identityKey,
-          parsed: candidate.parsed,
-          joinedEmail: candidate.joinedEmail,
-          emailSource: candidate.emailSource,
-          resolvedEmail: candidate.resolvedEmail,
-          matchAttorneyId: candidate.matchAttorneyId,
-          matchMethod: candidate.matchMethod,
-          resolution: candidate.resolution,
-          issues: candidate.issues,
-        })
-        .returning({ id: rosterImportCandidates.id });
-      id = inserted[0]?.id;
+  const ids = new Map<string, string>();
+  for (const batch of batchesOf(candidates)) {
+    const payload = batch.map((candidate) => ({
+      identity_key: candidate.identityKey,
+      parsed: candidate.parsed,
+      joined_email: candidate.joinedEmail,
+      email_source: candidate.emailSource,
+      resolved_email: candidate.resolvedEmail,
+      match_attorney_id: candidate.matchAttorneyId,
+      match_method: candidate.matchMethod,
+      resolution: candidate.resolution,
+      issues: candidate.issues,
+    }));
+    const written = await db.execute(sql`
+      INSERT INTO roster_import_candidates (
+        import_id, identity_key, parsed, joined_email, email_source,
+        resolved_email, match_attorney_id, match_method, resolution, issues
+      )
+      SELECT
+        ${importId}::uuid, candidate.identity_key, candidate.parsed,
+        candidate.joined_email, candidate.email_source,
+        candidate.resolved_email, candidate.match_attorney_id,
+        candidate.match_method, candidate.resolution, candidate.issues
+      FROM jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) AS candidate(
+        identity_key text, parsed jsonb, joined_email text, email_source text,
+        resolved_email text, match_attorney_id uuid, match_method text,
+        resolution text, issues jsonb
+      )
+      ON CONFLICT (import_id, identity_key) DO UPDATE SET
+        parsed = EXCLUDED.parsed,
+        joined_email = EXCLUDED.joined_email,
+        email_source = EXCLUDED.email_source,
+        resolved_email = EXCLUDED.resolved_email,
+        match_attorney_id = EXCLUDED.match_attorney_id,
+        match_method = EXCLUDED.match_method,
+        resolution = EXCLUDED.resolution,
+        issues = EXCLUDED.issues,
+        applied_action = NULL,
+        applied_attorney_id = NULL,
+        applied_error = NULL,
+        applied_at = NULL
+      RETURNING id, identity_key
+    `);
+    for (const row of resultRows<{ id: string; identity_key: string }>(written)) {
+      ids.set(row.identity_key, row.id);
     }
-    if (!id) throw new Error("Failed to persist a roster candidate.");
-    output.push({ ...candidate, candidateId: id });
   }
-  return output;
+  return candidates.map((candidate) => {
+    const candidateId = ids.get(candidate.identityKey);
+    if (!candidateId) throw new Error("Failed to persist a roster candidate.");
+    return { ...candidate, candidateId };
+  });
 }
 
 export async function stageRosterPreview(input: {
@@ -184,18 +209,21 @@ export async function stageRosterPreview(input: {
 
   const candidates = await writePreviewCandidates(importId, validated);
   const candidateIds = new Map(candidates.map((candidate) => [candidate.identityKey, candidate.candidateId]));
-  for (const row of input.inspection.rows) {
+  const rawRows = input.inspection.rows.map((row) => {
     const key = identityKey(
       input.mapping.firstName ? row.raw[input.mapping.firstName]?.text ?? "" : "",
       input.mapping.lastName ? row.raw[input.mapping.lastName]?.text ?? "" : "",
       input.mapping.firm ? row.raw[input.mapping.firm]?.text ?? "" : ""
     );
-    await db.insert(rosterImportRows).values({
+    return {
       importId,
       rowNumber: row.rowNumber,
       raw: row.raw,
       candidateId: candidateIds.get(key) ?? null,
-    });
+    };
+  });
+  for (const batch of batchesOf(rawRows)) {
+    await db.insert(rosterImportRows).values(batch);
   }
   await db.update(rosterImports).set({ status: "previewed" }).where(eq(rosterImports.id, importId));
   return {
@@ -273,12 +301,11 @@ export async function correctRosterPreview(input: {
     joinedEmails: joinedEmailRecord(state.storedCandidates),
     overrides,
   });
-  const ids = new Map(state.storedCandidates.map((candidate) => [candidate.identityKey, candidate.id]));
   const mutable = validated.filter((candidate) => {
     const stored = state.storedCandidates.find((item) => item.identityKey === candidate.identityKey);
     return !stored?.appliedAction || !successfulActions.has(stored.appliedAction);
   });
-  const changed = await writePreviewCandidates(input.importId, mutable, ids);
+  const changed = await writePreviewCandidates(input.importId, mutable);
   const changedByKey = new Map(changed.map((candidate) => [candidate.identityKey, candidate]));
   const candidates = state.storedCandidates.map((stored) => changedByKey.get(stored.identityKey) ?? {
     candidateId: stored.id,
@@ -307,17 +334,21 @@ function samePracticeAreas(existing: ExistingAttorney, parsed: StoredCandidatePa
   );
 }
 
-function sameImportedFields(existing: ExistingAttorney, parsed: StoredCandidateParsed): boolean {
+function sameImportedFields(
+  existing: ExistingAttorney,
+  parsed: StoredCandidateParsed,
+  mapping: ColumnMapping
+): boolean {
   return (
     existing.firstName === parsed.firstName &&
     existing.lastName === parsed.lastName &&
     existing.firm === parsed.firm &&
-    existing.city === parsed.city &&
-    existing.organizationType === parsed.organizationType &&
+    (!mapping.city || existing.city === parsed.city) &&
+    (!mapping.organizationType || existing.organizationType === parsed.organizationType) &&
     samePracticeAreas(existing, parsed) &&
-    existing.partnerCount === parsed.partnerCount &&
-    existing.associateCount === parsed.associateCount &&
-    existing.ofCounselCount === parsed.ofCounselCount
+    (!mapping.partnerCount || existing.partnerCount === parsed.partnerCount) &&
+    (!mapping.associateCount || existing.associateCount === parsed.associateCount) &&
+    (!mapping.ofCounselCount || existing.ofCounselCount === parsed.ofCounselCount)
   );
 }
 
@@ -357,6 +388,7 @@ export async function applyRosterImport(input: {
   corrections?: Array<{ candidateId: string; correctedEmail: string }>;
 }): Promise<ApplySummary> {
   const state = await readImport(input.eventId, input.importId);
+  const mapping = mappingFromUnknown(state.rosterImport.columnMapping);
   const validDecisions = new Set<ApplyDecision>(["create", "update", "skip"]);
   const decisionIds = new Set<string>();
   for (const item of input.decisions) {
@@ -384,7 +416,7 @@ export async function applyRosterImport(input: {
   const summary: ApplySummary = { created: 0, updated: 0, unchanged: 0, skipped: 0, raced: 0, failed: 0 };
   const recomputed = validateRosterCandidates({
     rows: state.rows.map((row) => ({ rowNumber: row.rowNumber, raw: row.raw as StoredRow })),
-    mapping: mappingFromUnknown(state.rosterImport.columnMapping),
+    mapping,
     percentFormat: formatFromUnknown(state.rosterImport.percentFormat),
     existingAttorneys: state.existing,
     joinedEmails: joinedEmailRecord(state.storedCandidates),
@@ -440,7 +472,7 @@ export async function applyRosterImport(input: {
         if (!candidate.matchAttorneyId || candidate.resolution !== "update") throw new Error("Server validation does not authorize update.");
         const current = state.existing.find((attorney) => attorney.id === candidate.matchAttorneyId);
         if (!current) throw new Error("Matched attorney no longer exists.");
-        if (sameImportedFields(current, candidate.parsed)) {
+        if (sameImportedFields(current, candidate.parsed, mapping)) {
           await addReferences(candidate, current.id, input.importId, state.rosterImport.uploadedBy);
           await recordOutcome(stored.id, { action: "unchanged", attorneyId: current.id });
           summary.unchanged += 1;
@@ -450,14 +482,22 @@ export async function applyRosterImport(input: {
             firstName: candidate.parsed.firstName,
             lastName: candidate.parsed.lastName,
             firm: candidate.parsed.firm,
-            city: candidate.parsed.city,
-            organizationType: candidate.parsed.organizationType,
+            ...(mapping.city ? { city: candidate.parsed.city } : {}),
+            ...(mapping.organizationType
+              ? { organizationType: candidate.parsed.organizationType }
+              : {}),
             ...(!preserveLegacyPracticeAreas
               ? { practiceAreas: candidate.parsed.practiceAreas }
               : {}),
-            partnerCount: candidate.parsed.partnerCount,
-            associateCount: candidate.parsed.associateCount,
-            ofCounselCount: candidate.parsed.ofCounselCount,
+            ...(mapping.partnerCount
+              ? { partnerCount: candidate.parsed.partnerCount }
+              : {}),
+            ...(mapping.associateCount
+              ? { associateCount: candidate.parsed.associateCount }
+              : {}),
+            ...(mapping.ofCounselCount
+              ? { ofCounselCount: candidate.parsed.ofCounselCount }
+              : {}),
             updatedAt: new Date(),
           }).where(and(
             eq(attorneys.id, current.id),

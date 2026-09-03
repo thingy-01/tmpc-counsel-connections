@@ -27,7 +27,6 @@ export type ScheduleItem = {
   companyName: string;
   interviewerName: string | null;
   preferredPlatform: string | null;
-  notes: string | null;
 };
 
 export type AudienceAttorney = {

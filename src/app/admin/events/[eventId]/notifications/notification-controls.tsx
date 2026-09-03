@@ -143,7 +143,7 @@ export function RetryFailed(props: { eventId: string; batchId: string }) {
       <input type="hidden" name="eventId" value={props.eventId} />
       <input type="hidden" name="batchId" value={props.batchId} />
       <Button type="submit" variant="outline" disabled={pending}>
-        {pending ? "Retrying…" : "Retry failed only"}
+        {pending ? "Retrying…" : "Retry unfinished recipients"}
       </Button>
       <Result state={state} />
     </form>

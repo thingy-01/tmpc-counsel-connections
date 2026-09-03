@@ -62,7 +62,6 @@ export async function loadEventAudience(
         companyName: companies.name,
         interviewerName: companyInterviewers.name,
         preferredPlatform: companies.preferredPlatform,
-        notes: assignments.notes,
       })
       .from(assignments)
       .innerJoin(attorneys, eq(assignments.attorneyId, attorneys.id))
@@ -104,7 +103,6 @@ export async function loadEventAudience(
       companyName: row.companyName,
       interviewerName: row.interviewerName,
       preferredPlatform: row.preferredPlatform,
-      notes: row.notes,
     });
     scheduleByAttorney.set(row.attorneyId, schedule);
   }
@@ -167,7 +165,6 @@ export async function loadMailMergeAttorneys(
         companyName: item.companyName,
         interviewerName: item.interviewerName,
         preferredPlatform: item.preferredPlatform,
-        notes: item.notes,
       })),
     }));
 }

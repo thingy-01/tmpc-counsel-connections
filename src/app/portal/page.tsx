@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Link from "next/link";
-import { isCompanyProfileComplete } from "./actions";
+import { isCompanyProfileComplete } from "@/lib/company-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +68,7 @@ export default async function PortalHome() {
     return <div className="text-slate-500">Company not found.</div>;
   }
 
-  const profileComplete = await isCompanyProfileComplete(company);
+  const profileComplete = isCompanyProfileComplete(company);
 
   const startDate = new Date(event.startDate + "T00:00:00").toLocaleDateString(
     "en-US",

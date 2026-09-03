@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { requireLocalTestDatabase } from "../../../scripts/test-database-guard";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { mock } from "node:test";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -24,10 +25,13 @@ import {
   type NotificationTransport,
 } from "./service";
 
+mock.module("server-only", { defaultExport: {} });
+
 const createdEventIds: string[] = [];
 
 type Scenario = {
   eventId: string;
+  companyId: string;
   attorneyIds: string[];
   assignmentIds: string[];
 };
@@ -75,13 +79,15 @@ async function scenario(options?: { ambiguous?: boolean; recipientCount?: number
     const assignmentId = randomUUID();
     attorneyIds.push(attorneyId);
     assignmentIds.push(assignmentId);
-    const minutes = String(index * 15).padStart(2, "0");
-    const endMinutes = String(index * 15 + 15).padStart(2, "0");
+    const startMinute = 16 * 60 + index * 15;
+    const endMinute = startMinute + 15;
+    const startTime = `${String(Math.floor(startMinute / 60)).padStart(2, "0")}:${String(startMinute % 60).padStart(2, "0")}:00`;
+    const endTime = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}:00`;
     await db.insert(timeSlots).values({
       id: slotId,
       eventDayId: dayId,
-      startTime: `16:${minutes}:00`,
-      endTime: `16:${endMinutes}:00`,
+      startTime,
+      endTime,
       sortOrder: index,
     });
     await db.insert(attorneys).values({
@@ -105,9 +111,10 @@ async function scenario(options?: { ambiguous?: boolean; recipientCount?: number
       timeSlotId: slotId,
       interviewerId,
       status: "confirmed",
+      notes: "PRIVATE_ASSIGNMENT_NOTE_SENTINEL",
     });
   }
-  return { eventId, attorneyIds, assignmentIds };
+  return { eventId, companyId, attorneyIds, assignmentIds };
 }
 
 async function draft(eventId: string): Promise<string> {
@@ -143,11 +150,14 @@ async function testStoredPreviewAndStaleness(): Promise<void> {
   assert.equal(firstPreview.revision, 1);
   const stored = (await rows(batchId))[0];
   assert.ok(stored.renderedBody.includes("Synthetic Company"));
+  assert.ok(stored.renderedBody.includes("Interviewer: Jordan Synthetic"));
+  assert.ok(stored.renderedBody.includes("Platform: Zoom"));
+  assert.equal(stored.renderedBody.includes("PRIVATE_ASSIGNMENT_NOTE_SENTINEL"), false);
 
   await db
-    .update(assignments)
-    .set({ notes: "Schedule changed after preview" })
-    .where(eq(assignments.id, item.assignmentIds[0]));
+    .update(companies)
+    .set({ preferredPlatform: "teams" })
+    .where(eq(companies.id, item.companyId));
   const messages: EmailMessage[] = [];
   const stale = await authorizeAndSend({
     eventId: item.eventId,
@@ -300,6 +310,102 @@ async function testRetries(): Promise<void> {
   assert.equal((await rows(permanentBatch))[0].status, "failed_permanent");
 }
 
+async function testInterruptedDeliveryLease(): Promise<void> {
+  const item = await scenario();
+  const batchId = await draft(item.eventId);
+  await generatePreview({ eventId: item.eventId, batchId });
+  await db
+    .update(notificationBatches)
+    .set({ status: "authorized", authorizedBy: "integration-admin", authorizedAt: new Date() })
+    .where(eq(notificationBatches.id, batchId));
+  const before = (await rows(batchId))[0];
+  await db
+    .update(notificationRecipients)
+    .set({ status: "sending", attempts: 1, sendClaimedAt: new Date() })
+    .where(eq(notificationRecipients.id, before.id));
+
+  const freshMessages: EmailMessage[] = [];
+  const fresh = await deliverBatch({
+    eventId: item.eventId,
+    batchId,
+    mode: "failed_only",
+    transport: successTransport(freshMessages),
+  });
+  assert.equal(fresh.sent, 0);
+  assert.equal(freshMessages.length, 0);
+  assert.equal((await rows(batchId))[0].status, "sending");
+
+  await db
+    .update(notificationRecipients)
+    .set({ sendClaimedAt: new Date(Date.now() - 120_000) })
+    .where(eq(notificationRecipients.id, before.id));
+  const recoveredMessages: EmailMessage[] = [];
+  const recovered = await deliverBatch({
+    eventId: item.eventId,
+    batchId,
+    mode: "failed_only",
+    transport: successTransport(recoveredMessages),
+  });
+  assert.equal(recovered.sent, 1);
+  assert.equal(recoveredMessages[0].idempotencyKey, before.providerIdempotencyKey);
+  const after = (await rows(batchId))[0];
+  assert.equal(after.status, "sent");
+  assert.equal(after.attempts, 1);
+  assert.equal(after.sendClaimedAt, null);
+}
+
+async function testSystemFailureStopsAndResumesBatch(): Promise<void> {
+  const item = await scenario({ recipientCount: 7 });
+  const batchId = await draft(item.eventId);
+  await generatePreview({ eventId: item.eventId, batchId });
+  const firstKeys = new Map<string, string | undefined>();
+  let calls = 0;
+  const rejectedConfiguration: NotificationTransport = {
+    async send(message) {
+      calls += 1;
+      firstKeys.set(message.to, message.idempotencyKey);
+      throw new EmailDeliveryError("Synthetic sender rejection.", false, "system");
+    },
+  };
+  const first = await authorizeAndSend({
+    eventId: item.eventId,
+    batchId,
+    previewRevision: 1,
+    authorizedBy: "integration-admin",
+    transport: rejectedConfiguration,
+  });
+  assert.match(first.refused ?? "", /provider|configuration/i);
+  assert.ok(calls > 0 && calls < 7, `expected bounded claims, received ${calls}`);
+  const interrupted = await rows(batchId);
+  assert.ok(interrupted.some((recipient) => recipient.status === "pending"));
+  assert.ok(interrupted.some((recipient) => recipient.status === "failed"));
+  assert.ok(
+    interrupted
+      .filter((recipient) => recipient.status === "failed")
+      .every((recipient) => recipient.attempts === 0)
+  );
+  assert.equal(interrupted.some((recipient) => recipient.status === "failed_permanent"), false);
+  const [partialBatch] = await db
+    .select()
+    .from(notificationBatches)
+    .where(eq(notificationBatches.id, batchId));
+  assert.equal(partialBatch.status, "partial");
+
+  const retryMessages: EmailMessage[] = [];
+  const retry = await deliverBatch({
+    eventId: item.eventId,
+    batchId,
+    mode: "failed_only",
+    transport: successTransport(retryMessages),
+  });
+  assert.equal(retry.sent, 7);
+  for (const message of retryMessages) {
+    const priorKey = firstKeys.get(message.to);
+    if (priorKey) assert.equal(message.idempotencyKey, priorKey);
+  }
+  assert.ok((await rows(batchId)).every((recipient) => recipient.status === "sent"));
+}
+
 async function testConcurrencyAndAuthorization(): Promise<void> {
   const unauthorizedItem = await scenario();
   const unauthorizedBatch = await draft(unauthorizedItem.eventId);
@@ -363,6 +469,31 @@ async function testNonAdminActions(): Promise<void> {
   else process.env.DEV_AUTH = previous;
 }
 
+async function testStaffActorAuditIdentity(): Promise<void> {
+  const item = await scenario();
+  const previous = process.env.DEV_AUTH;
+  process.env.DEV_AUTH = "admin";
+  try {
+    const { staffActorId } = await import("../staff-actor");
+    const actorId = await staffActorId();
+    const batchId = await createNotificationBatch({
+      eventId: item.eventId,
+      audienceKind: "all_active",
+      subject: "Synthetic audit subject",
+      bodyTemplate: "Synthetic audit body",
+      createdBy: actorId,
+    });
+    const [batch] = await db
+      .select()
+      .from(notificationBatches)
+      .where(eq(notificationBatches.id, batchId));
+    assert.equal(batch.createdBy, "development-staff");
+  } finally {
+    if (previous === undefined) delete process.env.DEV_AUTH;
+    else process.env.DEV_AUTH = previous;
+  }
+}
+
 async function cleanup(): Promise<void> {
   for (const eventId of createdEventIds.reverse()) {
     await db.delete(events).where(eq(events.id, eventId));
@@ -378,9 +509,12 @@ async function main(): Promise<void> {
   );
   try {
     await testNonAdminActions();
+    await testStaffActorAuditIdentity();
     await testStoredPreviewAndStaleness();
     await testAmbiguousEmails();
     await testRetries();
+    await testInterruptedDeliveryLease();
+    await testSystemFailureStopsAndResumesBatch();
     await testConcurrencyAndAuthorization();
     console.log("notification database integration passed");
   } finally {

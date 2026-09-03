@@ -9,6 +9,7 @@ import {
   generatePreview,
 } from "@/lib/notifications/service";
 import { isAudienceKind } from "@/lib/notifications/types";
+import { staffActorId } from "@/lib/staff-actor";
 
 export type NotificationActionResult = {
   ok: boolean;
@@ -52,12 +53,13 @@ export async function createBatchAction(
     return { ok: false, error: "Enter a message of 20,000 characters or fewer." };
   }
   try {
+    const actorId = await staffActorId();
     await createNotificationBatch({
       eventId,
       audienceKind,
       subject,
       bodyTemplate,
-      createdBy: "staff-admin",
+      createdBy: actorId,
     });
     refresh(eventId);
     return { ok: true, message: "Draft created. Generate its preview before sending." };
@@ -103,11 +105,12 @@ export async function authorizeBatchAction(
     return { ok: false, error: "Confirm the exact preview before authorizing delivery." };
   }
   try {
+    const actorId = await staffActorId();
     const result = await authorizeAndSend({
       eventId,
       batchId,
       previewRevision,
-      authorizedBy: "staff-admin",
+      authorizedBy: actorId,
     });
     refresh(eventId);
     if (result.refused) return { ok: false, error: result.refused };

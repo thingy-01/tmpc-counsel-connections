@@ -31,6 +31,9 @@ type ClaimedRecipient = {
   provider_idempotency_key: string;
 };
 
+const EMAIL_PROVIDER_TIMEOUT_MS = 20_000;
+const SEND_CLAIM_LEASE_MS = 60_000;
+
 function resultRows<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
   if (result && typeof result === "object" && "rows" in result) {
@@ -207,6 +210,7 @@ export async function generatePreview(input: {
         provider_idempotency_key = EXCLUDED.provider_idempotency_key,
         status = EXCLUDED.status,
         attempts = 0,
+        send_claimed_at = NULL,
         last_error = NULL,
         provider_message_id = NULL,
         sent_at = NULL,
@@ -354,8 +358,6 @@ export async function deliverBatch(input: {
       )
     );
 
-  const eligibleStatuses =
-    input.mode === "failed_only" ? ["failed"] : ["pending", "failed"];
   const candidates = await db
     .select({ id: notificationRecipients.id })
     .from(notificationRecipients)
@@ -370,19 +372,32 @@ export async function deliverBatch(input: {
   let nextIndex = 0;
   let sent = 0;
   let failed = 0;
+  let systemFailure: string | null = null;
 
   async function worker() {
     while (nextIndex < candidates.length) {
+      if (systemFailure) return;
       const candidate = candidates[nextIndex++];
+      const claimedAt = new Date();
       const claimedResult = await db.execute(sql`
         UPDATE notification_recipients
-           SET status = 'sending', attempts = attempts + 1
+           SET status = 'sending',
+               attempts = attempts + CASE WHEN status = 'sending' THEN 0 ELSE 1 END,
+               send_claimed_at = ${claimedAt}
          WHERE id = ${candidate.id}::uuid
-           AND status IN (${sql.join(
-             eligibleStatuses.map((status) => sql`${status}`),
-             sql`, `
-           )})
-           AND attempts < 3
+           AND (
+             (status = 'pending' AND attempts < 3)
+             OR (
+               ${input.mode === "failed_only"}
+               AND status = 'failed'
+               AND attempts < 3
+             )
+             OR (
+               ${input.mode === "failed_only"}
+               AND status = 'sending'
+               AND send_claimed_at < now() - (${SEND_CLAIM_LEASE_MS} * interval '1 millisecond')
+             )
+           )
         RETURNING *
       `);
       const claimed = resultRows<ClaimedRecipient>(claimedResult);
@@ -397,37 +412,54 @@ export async function deliverBatch(input: {
           html: textAsHtml(recipient.rendered_body),
           idempotencyKey: recipient.provider_idempotency_key,
         });
-        await db
+        const recorded = await db
           .update(notificationRecipients)
           .set({
             status: "sent",
             providerMessageId: result.messageId,
             lastError: null,
             sentAt: new Date(),
+            sendClaimedAt: null,
           })
           .where(
             and(
               eq(notificationRecipients.id, recipient.id),
-              eq(notificationRecipients.status, "sending")
+              eq(notificationRecipients.status, "sending"),
+              eq(notificationRecipients.sendClaimedAt, claimedAt)
             )
-          );
-        sent += 1;
+          )
+          .returning({ id: notificationRecipients.id });
+        if (recorded.length === 1) sent += 1;
       } catch (error) {
+        const systemic =
+          error instanceof EmailDeliveryError && error.scope === "system";
         const permanent =
-          error instanceof EmailDeliveryError && !error.retryable;
-        await db
+          error instanceof EmailDeliveryError &&
+          error.scope === "recipient" &&
+          !error.retryable;
+        if (systemic) {
+          systemFailure =
+            "The email provider rejected or could not process this delivery configuration. Correct the provider or sender configuration, then retry unfinished recipients.";
+        }
+        const recorded = await db
           .update(notificationRecipients)
           .set({
             status: permanent ? "failed_permanent" : "failed",
+            ...(systemic
+              ? { attempts: sql`greatest(${notificationRecipients.attempts} - 1, 0)` }
+              : {}),
             lastError: safeDeliveryError(error),
+            sendClaimedAt: null,
           })
           .where(
             and(
               eq(notificationRecipients.id, recipient.id),
-              eq(notificationRecipients.status, "sending")
+              eq(notificationRecipients.status, "sending"),
+              eq(notificationRecipients.sendClaimedAt, claimedAt)
             )
-          );
-        failed += 1;
+          )
+          .returning({ id: notificationRecipients.id });
+        if (recorded.length === 1) failed += 1;
       }
     }
   }
@@ -452,7 +484,7 @@ export async function deliverBatch(input: {
       completedAt: unfinished > 0 ? null : new Date(),
     })
     .where(eq(notificationBatches.id, input.batchId));
-  return { sent, failed };
+  return { sent, failed, ...(systemFailure ? { refused: systemFailure } : {}) };
 }
 
 function configuredSender(): string {
@@ -475,8 +507,12 @@ async function sendWithTimeout(
       transport.send(message),
       new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(
-          () => reject(new Error("Email provider response timed out.")),
-          20_000
+          () => reject(new EmailDeliveryError(
+            "Email provider response timed out.",
+            true,
+            "system"
+          )),
+          EMAIL_PROVIDER_TIMEOUT_MS
         );
       }),
     ]);

@@ -10,10 +10,13 @@ export type EmailMessage = {
 
 export type EmailSendResult = { messageId: string | null };
 
+export type EmailFailureScope = "recipient" | "system";
+
 export class EmailDeliveryError extends Error {
   constructor(
     message: string,
-    readonly retryable: boolean
+    readonly retryable: boolean,
+    readonly scope: EmailFailureScope = "recipient"
   ) {
     super(message);
     this.name = "EmailDeliveryError";

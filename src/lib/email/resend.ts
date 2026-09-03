@@ -18,23 +18,32 @@ export class ResendEmailTransport implements EmailTransport {
   }
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
-    const response = await fetch(RESEND_EMAILS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-        ...(message.idempotencyKey
-          ? { "Idempotency-Key": message.idempotencyKey }
-          : {}),
-      },
-      body: JSON.stringify({
-        from: message.from,
-        to: [message.to],
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(RESEND_EMAILS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+          ...(message.idempotencyKey
+            ? { "Idempotency-Key": message.idempotencyKey }
+            : {}),
+        },
+        body: JSON.stringify({
+          from: message.from,
+          to: [message.to],
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+        }),
+      });
+    } catch {
+      throw new EmailDeliveryError(
+        "Resend email delivery could not reach the provider.",
+        true,
+        "system"
+      );
+    }
 
     if (!response.ok) {
       // Do not include the provider body: it may contain recipient or message
@@ -59,7 +68,8 @@ export class ResendEmailTransport implements EmailTransport {
           retryableConflict ||
           response.status === 425 ||
           response.status === 429 ||
-          response.status >= 500
+          response.status >= 500,
+        "system"
       );
     }
     const result = (await response.json()) as { id?: unknown };
