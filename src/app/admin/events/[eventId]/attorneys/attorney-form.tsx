@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -268,6 +268,7 @@ export function EditAttorneySection({
   attorney: AttorneyFormValues & { id: string };
 }) {
   const [state, formAction, pending] = useActionState(updateAttorney, idle);
+  const formRef = useRef<HTMLFormElement>(null);
   const fieldKey = JSON.stringify([
     attorney.firstName,
     attorney.lastName,
@@ -279,14 +280,20 @@ export function EditAttorneySection({
     parsePracticeAreas(attorney.practiceAreas).entries,
   ]);
 
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+
+    const preventReset = (event: Event) => event.preventDefault();
+    form.addEventListener("reset", preventReset, true);
+    return () => form.removeEventListener("reset", preventReset, true);
+  }, []);
+
   return (
     <form
+      ref={formRef}
       action={formAction}
       className="space-y-3"
-      onReset={(event) => {
-        // Successful Server Actions dispatch a native reset; keep the practice selections visible.
-        event.preventDefault();
-      }}
     >
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="attorneyId" value={attorney.id} />
