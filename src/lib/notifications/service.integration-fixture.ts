@@ -352,6 +352,83 @@ async function testInterruptedDeliveryLease(): Promise<void> {
   assert.equal(after.status, "sent");
   assert.equal(after.attempts, 1);
   assert.equal(after.sendClaimedAt, null);
+
+  const legacyItem = await scenario();
+  const legacyBatchId = await draft(legacyItem.eventId);
+  await generatePreview({ eventId: legacyItem.eventId, batchId: legacyBatchId });
+  await db
+    .update(notificationBatches)
+    .set({ status: "authorized", authorizedBy: "integration-admin", authorizedAt: new Date() })
+    .where(eq(notificationBatches.id, legacyBatchId));
+  const legacyBefore = (await rows(legacyBatchId))[0];
+  await db
+    .update(notificationRecipients)
+    .set({ status: "sending", attempts: 2, sendClaimedAt: null })
+    .where(eq(notificationRecipients.id, legacyBefore.id));
+  const legacyMessages: EmailMessage[] = [];
+  const legacyRecovered = await deliverBatch({
+    eventId: legacyItem.eventId,
+    batchId: legacyBatchId,
+    mode: "failed_only",
+    transport: successTransport(legacyMessages),
+  });
+  assert.equal(legacyRecovered.sent, 1);
+  assert.equal(legacyMessages[0].idempotencyKey, legacyBefore.providerIdempotencyKey);
+  const legacyAfter = (await rows(legacyBatchId))[0];
+  assert.equal(legacyAfter.status, "sent");
+  assert.equal(legacyAfter.attempts, 2);
+}
+
+async function testRecipientTimeoutIsolation(): Promise<void> {
+  const item = await scenario({ recipientCount: 3 });
+  const batchId = await draft(item.eventId);
+  await generatePreview({ eventId: item.eventId, batchId });
+  await db
+    .update(notificationBatches)
+    .set({ status: "authorized", authorizedBy: "integration-admin", authorizedAt: new Date() })
+    .where(eq(notificationBatches.id, batchId));
+  const before = await rows(batchId);
+  const timedOut = before.find((recipient) => recipient.email === "avery.synthetic@example.test");
+  assert.ok(timedOut);
+  const delivered: EmailMessage[] = [];
+  const transport: NotificationTransport = {
+    async send(message) {
+      if (message.to === timedOut.email) return new Promise<never>(() => undefined);
+      delivered.push(message);
+      return { messageId: `synthetic-${message.to}` };
+    },
+  };
+  const first = await deliverBatch({
+    eventId: item.eventId,
+    batchId,
+    mode: "all",
+    transport,
+    timeoutMs: 20,
+  });
+  assert.equal(first.refused, undefined);
+  assert.equal(first.sent, 2);
+  assert.equal(first.failed, 1);
+  assert.equal(delivered.length, 2);
+  const afterTimeout = await rows(batchId);
+  const failed = afterTimeout.find((recipient) => recipient.id === timedOut.id);
+  assert.equal(failed?.status, "failed");
+  assert.equal(failed?.attempts, 1);
+  assert.match(failed?.lastError ?? "", /timed out/i);
+  assert.equal(afterTimeout.filter((recipient) => recipient.status === "sent").length, 2);
+
+  const retried: EmailMessage[] = [];
+  const retry = await deliverBatch({
+    eventId: item.eventId,
+    batchId,
+    mode: "failed_only",
+    transport: successTransport(retried),
+    timeoutMs: 20,
+  });
+  assert.equal(retry.sent, 1);
+  assert.equal(retried[0].idempotencyKey, timedOut.providerIdempotencyKey);
+  const afterRetry = (await rows(batchId)).find((recipient) => recipient.id === timedOut.id);
+  assert.equal(afterRetry?.status, "sent");
+  assert.equal(afterRetry?.attempts, 2);
 }
 
 async function testSystemFailureStopsAndResumesBatch(): Promise<void> {
@@ -514,6 +591,7 @@ async function main(): Promise<void> {
     await testAmbiguousEmails();
     await testRetries();
     await testInterruptedDeliveryLease();
+    await testRecipientTimeoutIsolation();
     await testSystemFailureStopsAndResumesBatch();
     await testConcurrencyAndAuthorization();
     console.log("notification database integration passed");

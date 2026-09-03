@@ -331,6 +331,8 @@ export async function deliverBatch(input: {
   batchId: string;
   mode: "all" | "failed_only";
   transport?: NotificationTransport;
+  /** Test-only override. Production callers use the bounded default. */
+  timeoutMs?: number;
 }): Promise<{ sent: number; failed: number; refused?: string }> {
   if (!input.transport) await assertConfiguredTransport();
   const freshness = await freshBatch(input.batchId, input.eventId);
@@ -395,7 +397,10 @@ export async function deliverBatch(input: {
              OR (
                ${input.mode === "failed_only"}
                AND status = 'sending'
-               AND send_claimed_at < now() - (${SEND_CLAIM_LEASE_MS} * interval '1 millisecond')
+               AND (
+                 send_claimed_at IS NULL
+                 OR send_claimed_at < now() - (${SEND_CLAIM_LEASE_MS} * interval '1 millisecond')
+               )
              )
            )
         RETURNING *
@@ -404,14 +409,18 @@ export async function deliverBatch(input: {
       if (claimed.length !== 1) continue;
       const recipient = claimed[0];
       try {
-        const result = await sendWithTimeout(transport, {
-          from: sender,
-          to: recipient.email,
-          subject: recipient.rendered_subject,
-          text: recipient.rendered_body,
-          html: textAsHtml(recipient.rendered_body),
-          idempotencyKey: recipient.provider_idempotency_key,
-        });
+        const result = await sendWithTimeout(
+          transport,
+          {
+            from: sender,
+            to: recipient.email,
+            subject: recipient.rendered_subject,
+            text: recipient.rendered_body,
+            html: textAsHtml(recipient.rendered_body),
+            idempotencyKey: recipient.provider_idempotency_key,
+          },
+          input.timeoutMs ?? EMAIL_PROVIDER_TIMEOUT_MS
+        );
         const recorded = await db
           .update(notificationRecipients)
           .set({
@@ -499,7 +508,8 @@ function configuredSender(): string {
 
 async function sendWithTimeout(
   transport: NotificationTransport,
-  message: EmailMessage
+  message: EmailMessage,
+  timeoutMs: number
 ): Promise<EmailSendResult> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -510,9 +520,9 @@ async function sendWithTimeout(
           () => reject(new EmailDeliveryError(
             "Email provider response timed out.",
             true,
-            "system"
+            "recipient"
           )),
-          EMAIL_PROVIDER_TIMEOUT_MS
+          timeoutMs
         );
       }),
     ]);
