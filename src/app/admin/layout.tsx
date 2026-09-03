@@ -1,9 +1,12 @@
 import Link from "next/link";
 import AccountButton from "@/components/account-button";
+import { adminNavItems } from "@/lib/admin-nav";
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 
 import { desc } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 async function getEventId() {
   const result = await db
@@ -21,22 +24,7 @@ export default async function AdminLayout({
 }) {
   const eventId = await getEventId();
 
-  const navItems = [
-    { href: "/admin", label: "Dashboard" },
-    { href: "/admin/events", label: "Events" },
-    ...(eventId
-      ? [
-          { href: `/admin/events/${eventId}/days`, label: "Days & Slots" },
-          { href: `/admin/events/${eventId}/attorneys`, label: "Attorneys" },
-          { href: `/admin/events/${eventId}/companies`, label: "Companies" },
-          {
-            href: `/admin/events/${eventId}/assignments`,
-            label: "Master Schedule",
-          },
-          { href: `/admin/events/${eventId}/settings`, label: "Settings" },
-        ]
-      : []),
-  ];
+  const navItems = adminNavItems(eventId);
 
   return (
     <div className="flex min-h-screen">

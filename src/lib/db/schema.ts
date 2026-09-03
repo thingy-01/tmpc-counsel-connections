@@ -9,8 +9,10 @@ import {
   timestamp,
   jsonb,
   unique,
+  uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ============================================================
 // 1. events
@@ -295,3 +297,233 @@ export const attorneyLoginRateLimits = pgTable("attorney_login_rate_limits", {
     .defaultNow(),
   attempts: integer("attempts").notNull().default(1),
 });
+
+// ============================================================
+// 14. roster_imports
+// ============================================================
+export const rosterImports = pgTable(
+  "roster_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    uploadedBy: text("uploaded_by").notNull(),
+    originalFilename: text("original_filename").notNull(),
+    sheetName: text("sheet_name"),
+    fileSha256: text("file_sha256").notNull(),
+    columnMapping: jsonb("column_mapping").notNull().default({}),
+    percentFormat: text("percent_format").notNull().default("unspecified"),
+    status: text("status").notNull().default("draft"),
+    sourceRowCount: integer("source_row_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("roster_imports_event_created_idx").on(
+      table.eventId,
+      table.createdAt.desc()
+    ),
+  ]
+);
+
+// ============================================================
+// 15. roster_import_candidates
+// ============================================================
+export const rosterImportCandidates = pgTable(
+  "roster_import_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importId: uuid("import_id")
+      .notNull()
+      .references(() => rosterImports.id, { onDelete: "cascade" }),
+    identityKey: text("identity_key").notNull(),
+    parsed: jsonb("parsed").notNull(),
+    joinedEmail: text("joined_email"),
+    emailSource: text("email_source").notNull().default("none"),
+    resolvedEmail: text("resolved_email"),
+    matchAttorneyId: uuid("match_attorney_id").references(() => attorneys.id, {
+      onDelete: "set null",
+    }),
+    matchMethod: text("match_method").notNull().default("none"),
+    resolution: text("resolution").notNull().default("pending"),
+    issues: jsonb("issues").notNull().default([]),
+    appliedAction: text("applied_action"),
+    appliedAttorneyId: uuid("applied_attorney_id").references(
+      () => attorneys.id,
+      { onDelete: "set null" }
+    ),
+    appliedError: text("applied_error"),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("roster_import_candidates_import_identity_unique").on(
+      table.importId,
+      table.identityKey
+    ),
+  ]
+);
+
+// ============================================================
+// 16. roster_import_rows
+// ============================================================
+export const rosterImportRows = pgTable(
+  "roster_import_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importId: uuid("import_id")
+      .notNull()
+      .references(() => rosterImports.id, { onDelete: "cascade" }),
+    rowNumber: integer("row_number").notNull(),
+    raw: jsonb("raw").notNull(),
+    candidateId: uuid("candidate_id").references(
+      () => rosterImportCandidates.id,
+      { onDelete: "set null" }
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique("roster_import_rows_import_row_unique").on(
+      table.importId,
+      table.rowNumber
+    ),
+  ]
+);
+
+// ============================================================
+// 17. attorney_resume_references
+// ============================================================
+export const attorneyResumeReferences = pgTable(
+  "attorney_resume_references",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attorneyId: uuid("attorney_id")
+      .notNull()
+      .references(() => attorneys.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    label: text("label"),
+    source: text("source").notNull(),
+    importId: uuid("import_id").references(() => rosterImports.id, {
+      onDelete: "set null",
+    }),
+    addedBy: text("added_by"),
+    status: text("status").notNull().default("unverified"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique("attorney_resume_references_attorney_url_unique").on(
+      table.attorneyId,
+      table.url
+    ),
+  ]
+);
+
+// ============================================================
+// 18. attorney_reschedule_requests
+// ============================================================
+export const attorneyRescheduleRequests = pgTable(
+  "attorney_reschedule_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assignmentId: uuid("assignment_id").references(() => assignments.id, {
+      onDelete: "set null",
+    }),
+    attorneyId: uuid("attorney_id")
+      .notNull()
+      .references(() => attorneys.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    reason: text("reason"),
+    preferredAlternatives: jsonb("preferred_alternatives")
+      .notNull()
+      .default([]),
+    status: text("status").notNull().default("open"),
+    staffNote: text("staff_note"),
+    snapshot: jsonb("snapshot").notNull().default({}),
+    resolutionAssignmentId: uuid("resolution_assignment_id").references(
+      () => assignments.id,
+      { onDelete: "set null" }
+    ),
+    resolvedBy: text("resolved_by"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("attorney_reschedule_requests_active_unique")
+      .on(table.assignmentId)
+      .where(
+        sql`${table.status} IN ('open', 'in_review') AND ${table.assignmentId} IS NOT NULL`
+      ),
+    index("attorney_reschedule_requests_event_status_created_idx").on(
+      table.eventId,
+      table.status,
+      table.createdAt
+    ),
+  ]
+);
+
+// ============================================================
+// 19. notification_batches
+// ============================================================
+export const notificationBatches = pgTable("notification_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("schedule_announcement"),
+  subject: text("subject").notNull(),
+  bodyTemplate: text("body_template").notNull(),
+  audience: jsonb("audience").notNull().default({}),
+  status: text("status").notNull().default("draft"),
+  previewRevision: integer("preview_revision").notNull().default(0),
+  previewHash: text("preview_hash"),
+  previewedAt: timestamp("previewed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  authorizedBy: text("authorized_by"),
+  authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+// ============================================================
+// 20. notification_recipients
+// ============================================================
+export const notificationRecipients = pgTable(
+  "notification_recipients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => notificationBatches.id, { onDelete: "cascade" }),
+    attorneyId: uuid("attorney_id")
+      .notNull()
+      .references(() => attorneys.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    previewRevision: integer("preview_revision").notNull(),
+    renderedSubject: text("rendered_subject").notNull(),
+    renderedBody: text("rendered_body").notNull(),
+    contentHash: text("content_hash").notNull(),
+    providerIdempotencyKey: text("provider_idempotency_key").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    providerMessageId: text("provider_message_id"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique("notification_recipients_batch_attorney_unique").on(
+      table.batchId,
+      table.attorneyId
+    ),
+    unique("notification_recipients_provider_idempotency_key_unique").on(
+      table.providerIdempotencyKey
+    ),
+    index("notification_recipients_batch_status_idx").on(
+      table.batchId,
+      table.status
+    ),
+  ]
+);
