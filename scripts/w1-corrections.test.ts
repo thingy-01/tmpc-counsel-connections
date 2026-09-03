@@ -11,6 +11,7 @@ import {
 } from "../src/lib/practice-areas";
 import {
   hasStaffAdminMembership,
+  configuredStaffOrganizationId,
   isActiveStaffAdmin,
   isStaffAdminMembership,
 } from "../src/lib/staff-authorization";
@@ -105,6 +106,22 @@ test("staff authorization is scoped to the configured organization and role", as
   });
   assert.equal(found, true);
   assert.deepEqual(offsets, [0, 100]);
+});
+
+test("production staff authorization fails loudly without its organization id", () => {
+  const environment = process.env as Record<string, string | undefined>;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousOrganizationId = process.env.CLERK_ADMIN_ORG_ID;
+  environment.NODE_ENV = "production";
+  delete environment.CLERK_ADMIN_ORG_ID;
+  try {
+    assert.throws(() => configuredStaffOrganizationId(), /CLERK_ADMIN_ORG_ID/);
+  } finally {
+    if (previousNodeEnv === undefined) delete environment.NODE_ENV;
+    else environment.NODE_ENV = previousNodeEnv;
+    if (previousOrganizationId === undefined) delete environment.CLERK_ADMIN_ORG_ID;
+    else environment.CLERK_ADMIN_ORG_ID = previousOrganizationId;
+  }
 });
 
 test("attorney route boundary includes only the attorney tree", async () => {
@@ -214,24 +231,82 @@ test("assigned contact projection excludes unrelated attorney contact data", asy
   );
 });
 
-test("callback same-origin policy rejects missing and foreign origins", async () => {
-  const { isSameOriginAttorneyCallbackPost } = await import(
-    "../src/app/attorney/callback/policy"
-  );
+test("attorney POST policy accepts the browser no-referrer form shape", async () => {
+  const { isSameOriginRequest } = await import("../src/lib/same-origin");
   const url = "https://counsel.example/attorney/callback";
-  assert.equal(isSameOriginAttorneyCallbackPost(new Request(url)), false);
+  assert.equal(isSameOriginRequest(new Request(url)), false);
+
+  const browserFormHeaders = {
+    origin: "null",
+    "sec-fetch-site": "same-origin",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-dest": "document",
+    "content-type": "application/x-www-form-urlencoded",
+  };
   assert.equal(
-    isSameOriginAttorneyCallbackPost(
-      new Request(url, { headers: { origin: "https://attacker.example" } })
+    isSameOriginRequest(
+      new Request(url, { method: "POST", headers: browserFormHeaders })
+    ),
+    true
+  );
+  assert.equal(
+    isSameOriginRequest(
+      new Request(url, { method: "POST", headers: { origin: "null" } })
     ),
     false
   );
   assert.equal(
-    isSameOriginAttorneyCallbackPost(
+    isSameOriginRequest(
+      new Request(url, {
+        method: "POST",
+        headers: { ...browserFormHeaders, "sec-fetch-site": "cross-site" },
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isSameOriginRequest(
+      new Request(url, {
+        method: "POST",
+        headers: { ...browserFormHeaders, "sec-fetch-site": "same-site" },
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isSameOriginRequest(
+      new Request(url, {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin" },
+      })
+    ),
+    true
+  );
+  assert.equal(
+    isSameOriginRequest(
+      new Request(url, {
+        headers: {
+          origin: "https://attacker.example",
+          "sec-fetch-site": "same-origin",
+        },
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isSameOriginRequest(
       new Request(url, { headers: { origin: "https://counsel.example" } })
     ),
     true
   );
+  const logout = await import("../src/app/attorney/logout/route");
+  const response = await logout.POST(
+    new Request("https://counsel.example/attorney/logout", {
+      method: "POST",
+      headers: { origin: "https://attacker.example" },
+    })
+  );
+  assert.equal(response.status, 403);
 });
 
 test("misconfigured production attorney callback fails closed without a 500", async () => {

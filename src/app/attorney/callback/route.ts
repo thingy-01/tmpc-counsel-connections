@@ -7,7 +7,7 @@ import {
   assertAttorneySessionConfigured,
   setAttorneySession,
 } from "@/lib/session";
-import { isSameOriginAttorneyCallbackPost } from "./policy";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 const PRIVATE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -77,7 +77,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 /** Only a deliberate same-origin form submission redeems the one-use token. */
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!isSameOriginAttorneyCallbackPost(request)) {
+  if (!isSameOriginRequest(request)) {
     return redirectToLogin(request, "invalid");
   }
 
