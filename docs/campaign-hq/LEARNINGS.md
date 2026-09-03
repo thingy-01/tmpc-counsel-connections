@@ -30,3 +30,6 @@
 
 - September 3: Claude print-mode exited after a progress report and killed its background workers. Root preserved edits and resumed worker sessions directly. Live process and terminal result checks are mandatory; a started job is not proof of ongoing work.
 - September 3: XLSX percentages use fractional numbers with 0% format; legacy seed stores 0.5 for50%. Normalize meaning without inventing missing data.
+
+- Root app checks must exclude ignored work/ and outputs/; nested worker checkouts otherwise get linted/compiled as app source. Stage all new feature source before CodeRabbit so it reviews added files, not just tracked diffs.
+- Combined review found per-value percentage rescaling and mandatory repair of unchanged legacy data despite isolated CodeRabbit passes. Shared semantics and cross-model integration review remain required.

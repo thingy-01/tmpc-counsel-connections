@@ -1,6 +1,6 @@
 # Campaign: Counsel Connections September feedback
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
-Status: phase 1 of 4, Wave 1 resumed under direct root process supervision.
+Status: W1 commits integrated locally; cross-model corrections and W2 foundation active. Not released.
 
 ## Progress pulse
 - Reporting interval: concise root updates within 60 seconds during active work; substantive phase reports and at least every 15 minutes.
@@ -57,3 +57,11 @@ The Opus5 print-mode conductor returned a status report and exited0 at 16:13:42Z
 - Actual installed Neon HTTP driver passed a read-only production SELECT1; execute() returns object.rows.
 - Full production email configuration remains unresolved; user was asked provider/sender details asynchronously.
 - Jen/Tracy names are unidentified meeting references, per user's clarification; leave current staff memberships unchanged. This does not block feature implementation.
+
+## Wave 1 integration checkpoint
+- W1A source9f6a40e integrated90065b9; W1B source0f236a0 integrated4ee41ca; W1C source925dab3 integrated0103c3e. Root reran lint/typecheck after integration. Worker builds/local concurrency tests passed; none of this is production deployment.
+- Root excluded ignored work/ and outputs/ from ESLint/TypeScript to avoid scanning private scratch and nested worker checkouts (b3f3f2b). No app source excluded.
+- Claude Opus separate-author snapshot report work/reviews/w1-cross-model.md found substantive login/policy/legacy-preservation integration fixes. Codex correction brief w1-integration-corrections.md owns them; final integrated re-review remains.
+- W2 foundation active branch codex/w2-foundation in work/trees/w2-foundation fromfbfae1a (W1A+B; C has no ownership overlap), direct exec46176/logwork/w2-foundation.jsonl. Schema, SheetJS upgrade, test runner, navigation only.
+- W2A/B/C briefs prepared by Claude Opus5/high. Root launches from reviewed foundation+corrections+W1C merged base; no overlapping schema writers.
+- Synthetic QA fixture ready counsel_campaign_qa; private configwork/release-preflight/.env.qa.local; guideqa-guide.md. No production changes.
