@@ -18,7 +18,8 @@ function revalidate(eventId: string) {
   revalidatePath(`/admin/events/${eventId}/assignments`);
   revalidatePath("/admin");
   // Companies see these on their portal schedule immediately.
-  revalidatePath("/portal", "layout");
+  revalidatePath("/portal/schedule");
+  revalidatePath("/portal/schedule/review");
 }
 
 /**

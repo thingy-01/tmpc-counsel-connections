@@ -1,40 +1,95 @@
+import { and, eq, ne, or, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
+import { getCompanyId, getRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { attorneys } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { getRole } from "@/lib/auth";
+import { assignments, attorneys, companies } from "@/lib/db/schema";
 import { readResume } from "@/lib/storage";
 
+const PRIVATE_HEADERS = { "Cache-Control": "private, no-store" };
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function privateResponse(body: string, status: number): Response {
+  return new Response(body, { status, headers: PRIVATE_HEADERS });
+}
+
 export async function GET(
-  _req: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Any signed-in admin or company user may view resumes.
   const role = await getRole();
-  if (!role) return new Response("Unauthorized", { status: 401 });
+  if (role === null) return privateResponse("Unauthorized", 401);
+  // Explicit allowlist: future roles (including attorney) inherit no access.
+  if (role !== "admin" && role !== "company") {
+    return privateResponse("Forbidden", 403);
+  }
 
   const { id } = await params;
-  const attorney = await db.query.attorneys.findFirst({
-    where: eq(attorneys.id, id),
-    columns: { resumePath: true, resumeOriginalName: true },
-  });
+  if (!UUID_PATTERN.test(id)) return privateResponse("Not found", 404);
 
-  if (!attorney?.resumePath) return new Response("Not found", { status: 404 });
+  let attorney:
+    | { resumePath: string | null; resumeOriginalName: string | null }
+    | undefined;
+
+  if (role === "admin") {
+    const rows = await db
+      .select({
+        resumePath: attorneys.resumePath,
+        resumeOriginalName: attorneys.resumeOriginalName,
+      })
+      .from(attorneys)
+      .where(eq(attorneys.id, id))
+      .limit(1);
+    attorney = rows[0];
+  } else {
+    const companyId = await getCompanyId();
+    if (!companyId) return privateResponse("Unauthorized", 401);
+
+    const rows = await db
+      .select({
+        resumePath: attorneys.resumePath,
+        resumeOriginalName: attorneys.resumeOriginalName,
+      })
+      .from(attorneys)
+      .innerJoin(companies, eq(companies.eventId, attorneys.eventId))
+      .where(
+        and(
+          eq(attorneys.id, id),
+          eq(companies.id, companyId),
+          or(
+            ne(attorneys.status, "withdrawn"),
+            sql`exists (
+              select 1
+              from ${assignments}
+              where ${assignments.attorneyId} = ${attorneys.id}
+                and ${assignments.companyId} = ${companies.id}
+            )`
+          )
+        )
+      )
+      .limit(1);
+    attorney = rows[0];
+  }
+
+  if (!attorney?.resumePath) return privateResponse("Not found", 404);
 
   let bytes: Buffer;
   try {
     bytes = await readResume(attorney.resumePath);
   } catch {
-    return new Response("Not found", { status: 404 });
+    return privateResponse("Not found", 404);
   }
 
-  const filename = (attorney.resumeOriginalName ?? "resume.pdf").replace(/"/g, "");
+  const filename = (attorney.resumeOriginalName ?? "resume.pdf")
+    .replace(/[^a-zA-Z0-9._ -]/g, "")
+    .trim() || "resume.pdf";
 
   return new Response(new Uint8Array(bytes), {
     headers: {
+      ...PRIVATE_HEADERS,
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${filename}"`,
-      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

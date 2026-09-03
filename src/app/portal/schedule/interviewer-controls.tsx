@@ -17,10 +17,12 @@ export function InterviewerSelect({
   assignmentId,
   value,
   interviewers,
+  disabled = false,
 }: {
   assignmentId: string;
   value: string | null;
   interviewers: InterviewerOption[];
+  disabled?: boolean;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -30,6 +32,7 @@ export function InterviewerSelect({
       <select
         name="interviewerId"
         defaultValue={value ?? ""}
+        disabled={disabled}
         onChange={() => formRef.current?.requestSubmit()}
         className={selectClass}
       >
@@ -47,13 +50,20 @@ export function InterviewerSelect({
 /** Bulk control: assign a single interviewer to every slot. */
 export function AssignAllControl({
   interviewers,
+  disabled = false,
 }: {
   interviewers: InterviewerOption[];
+  disabled?: boolean;
 }) {
   return (
     <form action={assignAllToInterviewer} className="flex items-center gap-2">
       <span className="text-xs text-slate-500">Assign one person to all slots:</span>
-      <select name="interviewerId" defaultValue="" className={selectClass}>
+      <select
+        name="interviewerId"
+        defaultValue=""
+        className={selectClass}
+        disabled={disabled}
+      >
         <option value="">Choose…</option>
         {interviewers.map((iv) => (
           <option key={iv.id} value={iv.id}>
@@ -61,7 +71,7 @@ export function AssignAllControl({
           </option>
         ))}
       </select>
-      <Button size="sm" type="submit" variant="outline">
+      <Button size="sm" type="submit" variant="outline" disabled={disabled}>
         Apply to all
       </Button>
     </form>

@@ -27,6 +27,20 @@ export type PickableAttorney = {
   blocks: UnavailabilityBlock[];
 };
 
+/** Company-safe attorney data: no block rows, reasons, notes, or raw files. */
+export type CompanyPickableAttorney = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  firm: string;
+  city: string | null;
+  organizationType: string | null;
+  practiceAreas: Array<{ area: string; percent: number | null }>;
+  status: "active" | "withdrawn";
+  hasResume: boolean;
+  unavailableSlotIds: string[];
+};
+
 /**
  * A small red badge that reveals an attorney's specific unavailable times on click.
  * Reused in the admin roster and anywhere attorneys are listed.
@@ -167,6 +181,124 @@ export function AttorneyPicker({
           </li>
         )}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Company-only picker. Unlike the staff picker above, its availability model is
+ * deliberately generic and cannot carry an internal reason or note.
+ */
+export function CompanyAttorneyPicker({
+  attorneys,
+  slotId,
+  value,
+  onSelect,
+}: {
+  attorneys: CompanyPickableAttorney[];
+  slotId: string;
+  value?: string | null;
+  onSelect?: (attorneyId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return attorneys.filter((attorney) => {
+      const searchable = [
+        attorney.firstName,
+        attorney.lastName,
+        attorney.firm,
+        attorney.city ?? "",
+        attorney.organizationType ?? "",
+        ...attorney.practiceAreas.map((practice) => practice.area),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return !q || searchable.includes(q);
+    });
+  }, [attorneys, query]);
+
+  return (
+    <div className="space-y-2">
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Filter by name, firm, city, organization, or practice…"
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+      />
+      <div className="max-h-80 divide-y overflow-y-auto rounded-md border bg-white">
+        {filtered.map((attorney) => {
+          const current = attorney.id === value;
+          const unavailable = attorney.unavailableSlotIds.includes(slotId);
+          const withdrawn = attorney.status === "withdrawn";
+          const disabled = withdrawn || (unavailable && !current);
+          return (
+            <div
+              key={attorney.id}
+              className={cn(
+                "flex items-start gap-3 p-3",
+                current && "bg-emerald-50",
+                disabled && "bg-slate-50"
+              )}
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(attorney.id)}
+                className={cn(
+                  "min-w-0 flex-1 text-left",
+                  disabled ? "cursor-not-allowed opacity-60" : "hover:text-slate-950"
+                )}
+              >
+                <span className="block font-medium text-slate-900">
+                  {attorney.firstName} {attorney.lastName}
+                </span>
+                <span className="block text-sm text-slate-600">
+                  {attorney.firm}
+                  {attorney.city ? ` · ${attorney.city}` : ""}
+                </span>
+                {attorney.organizationType && (
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {attorney.organizationType}
+                  </span>
+                )}
+                {attorney.practiceAreas.length > 0 && (
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {attorney.practiceAreas
+                      .map((practice) =>
+                        practice.percent === null
+                          ? practice.area
+                          : `${practice.area} (${practice.percent}%)`
+                      )
+                      .join(" · ")}
+                  </span>
+                )}
+                {(unavailable || withdrawn) && (
+                  <span className="mt-1 block text-xs font-medium text-amber-700">
+                    {withdrawn ? "No longer selectable" : "Unavailable this time"}
+                  </span>
+                )}
+              </button>
+              {attorney.hasResume && (
+                <a
+                  href={`/api/attorneys/${attorney.id}/resume`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Resume
+                </a>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length === 0 && (
+          <p className="p-6 text-center text-sm text-slate-500">
+            No attorneys match that filter.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

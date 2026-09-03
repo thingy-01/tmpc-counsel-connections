@@ -1,8 +1,12 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { companyInterviewers, assignments } from "@/lib/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import {
+  companyInterviewers,
+  companies,
+  events,
+} from "@/lib/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getCompanyId } from "@/lib/auth";
 
@@ -10,6 +14,33 @@ async function requireCompanyId(): Promise<string> {
   const id = await getCompanyId();
   if (!id) throw new Error("Not authenticated as a company.");
   return id;
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireUuid(value: FormDataEntryValue | null, label: string): string {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+async function requireOpenScheduling(companyId: string): Promise<string> {
+  const rows = await db
+    .select({ eventId: companies.eventId })
+    .from(companies)
+    .innerJoin(events, eq(companies.eventId, events.id))
+    .where(and(eq(companies.id, companyId), eq(events.status, "open")))
+    .limit(1);
+  if (!rows[0]) throw new Error("Scheduling is closed for this event.");
+  return rows[0].eventId;
+}
+
+function revalidateSchedules(eventId: string): void {
+  revalidatePath("/portal/schedule");
+  revalidatePath("/portal/schedule/review");
+  revalidatePath(`/admin/events/${eventId}/assignments`);
 }
 
 /**
@@ -25,12 +56,17 @@ async function applyDefaultInterviewer(companyId: string): Promise<void> {
 
   if (list.length !== 1) return;
 
-  await db
-    .update(assignments)
-    .set({ interviewerId: list[0].id, updatedAt: new Date() })
-    .where(
-      and(eq(assignments.companyId, companyId), isNull(assignments.interviewerId))
-    );
+  await db.execute(sql`
+    update assignments as target
+    set interviewer_id = ${list[0].id}::uuid,
+        updated_at = now()
+    from companies as company, events as event
+    where target.company_id = company.id
+      and company.id = ${companyId}::uuid
+      and event.id = company.event_id
+      and event.status = 'open'
+      and target.interviewer_id is null
+  `);
 }
 
 async function interviewerBelongsToCompany(
@@ -88,58 +124,108 @@ export async function updateInterviewer(formData: FormData) {
 
 export async function deleteInterviewer(formData: FormData) {
   const companyId = await requireCompanyId();
-  const id = formData.get("id") as string;
+  const eventId = await requireOpenScheduling(companyId);
+  const id = requireUuid(formData.get("id"), "Interviewer identifier");
 
   // FK onDelete: set null clears this interviewer from any assignments.
-  await db
-    .delete(companyInterviewers)
-    .where(
-      and(
-        eq(companyInterviewers.id, id),
-        eq(companyInterviewers.companyId, companyId)
-      )
+  const result = await db.execute<{ id: string }>(sql`
+    delete from company_interviewers as target
+    using companies as company, events as event
+    where target.id = cast(${id} as uuid)
+      and target.company_id = company.id
+      and company.id = cast(${companyId} as uuid)
+      and event.id = company.event_id
+      and event.status = 'open'
+    returning target.id
+  `);
+  if (result.rows.length !== 1) {
+    throw new Error(
+      "That interviewer could not be removed. It may not belong to your company, or scheduling may have closed."
     );
+  }
   await applyDefaultInterviewer(companyId);
 
   revalidatePath("/portal/interviewers");
-  revalidatePath("/portal/schedule");
+  revalidateSchedules(eventId);
 }
 
 /** Assign (or clear) the interviewer for a single interview/assignment. */
 export async function assignInterviewer(formData: FormData) {
   const companyId = await requireCompanyId();
-  const assignmentId = formData.get("assignmentId") as string;
+  const eventId = await requireOpenScheduling(companyId);
+  const assignmentId = requireUuid(
+    formData.get("assignmentId"),
+    "Assignment identifier"
+  );
   const raw = (formData.get("interviewerId") as string) ?? "";
-  const interviewerId = raw === "" ? null : raw;
+  const interviewerId =
+    raw === "" ? null : requireUuid(raw, "Interviewer identifier");
 
   if (interviewerId && !(await interviewerBelongsToCompany(interviewerId, companyId))) {
     throw new Error("That interviewer does not belong to your company.");
   }
 
-  await db
-    .update(assignments)
-    .set({ interviewerId, updatedAt: new Date() })
-    .where(
-      and(eq(assignments.id, assignmentId), eq(assignments.companyId, companyId))
+  const result = await db.execute<{ id: string }>(sql`
+    update assignments as target
+    set interviewer_id = cast(${interviewerId} as uuid),
+        updated_at = now()
+    from companies as company, events as event
+    where target.id = cast(${assignmentId} as uuid)
+      and target.company_id = company.id
+      and company.id = cast(${companyId} as uuid)
+      and event.id = company.event_id
+      and event.status = 'open'
+      and (
+        cast(${interviewerId} as uuid) is null
+        or exists (
+          select 1
+          from company_interviewers as interviewer
+          where interviewer.id = cast(${interviewerId} as uuid)
+            and interviewer.company_id = company.id
+        )
+      )
+    returning target.id
+  `);
+  if (result.rows.length !== 1) {
+    throw new Error(
+      "That interview could not be changed. It may not belong to your company, or scheduling may have closed."
     );
+  }
 
-  revalidatePath("/portal/schedule");
+  revalidateSchedules(eventId);
 }
 
 /** Bulk-assign (or clear) one interviewer across all of the company's slots. */
 export async function assignAllToInterviewer(formData: FormData) {
   const companyId = await requireCompanyId();
+  const eventId = await requireOpenScheduling(companyId);
   const raw = (formData.get("interviewerId") as string) ?? "";
-  const interviewerId = raw === "" ? null : raw;
+  const interviewerId =
+    raw === "" ? null : requireUuid(raw, "Interviewer identifier");
 
   if (interviewerId && !(await interviewerBelongsToCompany(interviewerId, companyId))) {
     throw new Error("That interviewer does not belong to your company.");
   }
 
-  await db
-    .update(assignments)
-    .set({ interviewerId, updatedAt: new Date() })
-    .where(eq(assignments.companyId, companyId));
+  await db.execute(sql`
+    update assignments as target
+    set interviewer_id = cast(${interviewerId} as uuid),
+        updated_at = now()
+    from companies as company, events as event
+    where target.company_id = company.id
+      and company.id = cast(${companyId} as uuid)
+      and event.id = company.event_id
+      and event.status = 'open'
+      and (
+        cast(${interviewerId} as uuid) is null
+        or exists (
+          select 1
+          from company_interviewers as interviewer
+          where interviewer.id = cast(${interviewerId} as uuid)
+            and interviewer.company_id = company.id
+        )
+      )
+  `);
 
-  revalidatePath("/portal/schedule");
+  revalidateSchedules(eventId);
 }
