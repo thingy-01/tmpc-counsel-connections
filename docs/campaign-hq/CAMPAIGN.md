@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `a222db65-42d6-4d1e-a2de-8066327e8bce`, successfully promoted commit `eac572a7c35a7ae8a99e4b55d3d9dca20e62b83c` with the clarified public role tiles.
+Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `9ef6a282-20a0-48cd-9668-0cd612b99b05`, successfully promoted commit `e0bd209738f4c0b3e85cfc518ce6842bd0b1edef` with corrected public attorney redirects.
 
 ## Release candidate
 
@@ -54,6 +54,15 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 - Staff identifies TMCP administrators and links to staff sign-in.
 - CodeRabbit reported no findings. ESLint, strict TypeScript, the production build, responsive browser review, and live text and link checks passed.
 - Railway deployment `a222db65-42d6-4d1e-a2de-8066327e8bce` succeeded for `eac572a7c35a7ae8a99e4b55d3d9dca20e62b83c`.
+
+## Attorney public-redirect correction
+
+- Attorney login-request, callback success and error, and logout redirects now use one validated public application origin.
+- Railway's internal `localhost:8080` request origin can no longer appear in these redirect destinations.
+- The callback still reads the one-time token from the incoming request URL before it builds the public response destination.
+- CodeRabbit reported no findings. All 60 tests, ESLint, strict TypeScript, and the production build passed.
+- Railway deployment `9ef6a282-20a0-48cd-9668-0cd612b99b05` succeeded for `e0bd209738f4c0b3e85cfc518ce6842bd0b1edef`.
+- Live non-delivering checks returned public `counsel-connections.org` locations for login request, invalid callback, and logout redirects.
 
 ## Runtime status
 
