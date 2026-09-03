@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `8ae34bfe-d3a4-4004-8fbe-1100ebd5fe81`, successfully promoted commit `f70d8c2d61f5d045028b13380c82e18feb14d741` with the company profile completion gate.
+Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `a222db65-42d6-4d1e-a2de-8066327e8bce`, successfully promoted commit `eac572a7c35a7ae8a99e4b55d3d9dca20e62b83c` with the clarified public role tiles.
 
 ## Release candidate
 
@@ -45,6 +45,15 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 - Completed companies keep the existing schedule destination and full portal navigation.
 - CodeRabbit reported no findings. All 56 tests, strict TypeScript, ESLint, the production build, and synthetic browser acceptance passed.
 - Railway deployment `8ae34bfe-d3a4-4004-8fbe-1100ebd5fe81` succeeded for `f70d8c2d61f5d045028b13380c82e18feb14d741`. Live portal routes returned 200 with no observed deployment 5xx responses.
+
+## Public landing-page role follow-up
+
+- The public page now has distinct Company, Attorney, and Staff tiles.
+- Company identifies representatives who conduct interviews and links to the invite-code portal.
+- Attorney identifies attorneys who are interviewed and links to email sign-in.
+- Staff identifies TMCP administrators and links to staff sign-in.
+- CodeRabbit reported no findings. ESLint, strict TypeScript, the production build, responsive browser review, and live text and link checks passed.
+- Railway deployment `a222db65-42d6-4d1e-a2de-8066327e8bce` succeeded for `eac572a7c35a7ae8a99e4b55d3d9dca20e62b83c`.
 
 ## Runtime status
 
