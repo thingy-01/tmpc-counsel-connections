@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local campaign worktrees and private verification artifacts are not app source.
+    "work/**",
+    "outputs/**",
   ]),
 ]);
 
