@@ -257,3 +257,6 @@ Emit JSON matching `docs/campaign-hq/schemas/worker-result.json`. In `blockers`,
 the exact `practice-areas.ts` API you found and whether it can express an explicit
 whole-scale write; any acceptance case you could not exercise; and any place you needed a
 column the foundation did not provide.
+
+## Root cell-format precision
+Keep raw numeric cell.v and its number-format metadata alongside display text when staging spreadsheet rows. The shared readCellText helper prefers cell.w, so it may return '50%' for numeric0.5; never multiply that formatted string again merely because the mapping scale is fraction. Numeric0.5 with 0% format ->50, text'50%' ->50, unformatted numeric50 with whole mapping ->50. Preview examples and apply must prove these actual cases with the tracked workbook. Import/export parser helpers are server modules (spreadsheet-safe imports node:net); do not import that module from a client component.
