@@ -280,7 +280,14 @@ export function EditAttorneySection({
   ]);
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form
+      action={formAction}
+      className="space-y-3"
+      onReset={(event) => {
+        // Successful Server Actions dispatch a native reset; keep the practice selections visible.
+        event.preventDefault();
+      }}
+    >
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="attorneyId" value={attorney.id} />
       <AttorneyFields key={fieldKey} attorney={attorney} />
