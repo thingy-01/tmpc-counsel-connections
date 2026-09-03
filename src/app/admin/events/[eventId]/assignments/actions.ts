@@ -1,11 +1,23 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { assignments, attorneys } from "@/lib/db/schema";
+import {
+  assignments,
+  attorneys,
+  attorneyRescheduleRequests,
+} from "@/lib/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getRole } from "@/lib/auth";
 import { constraintViolated } from "@/lib/db/errors";
+import {
+  canTransitionRescheduleRequest,
+  atomicRescheduleStatement,
+  effectiveRescheduleStatus,
+  isRescheduleStatus,
+} from "@/lib/reschedule";
+import { auth } from "@clerk/nextjs/server";
+import { getDevAuth } from "@/lib/dev-auth";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -20,6 +32,19 @@ function revalidate(eventId: string) {
   // Companies see these on their portal schedule immediately.
   revalidatePath("/portal/schedule");
   revalidatePath("/portal/schedule/review");
+  revalidatePath("/attorney/schedule");
+  revalidatePath("/attorney/requests");
+  revalidatePath(`/admin/events/${eventId}/requests`);
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function staffActorId(): Promise<string> {
+  if (getDevAuth()?.role === "admin") return "development-staff";
+  const { userId } = await auth();
+  if (!userId) throw new Error("Authenticated staff identity required.");
+  return userId;
 }
 
 /**
@@ -106,6 +131,95 @@ export async function deleteAssignment(
   const eventId = formData.get("eventId") as string;
   const assignmentId = formData.get("assignmentId") as string;
   await db.delete(assignments).where(eq(assignments.id, assignmentId));
+  revalidate(eventId);
+  return { ok: true };
+}
+
+/** Atomically move a booking and close its active reschedule request. */
+export async function resolveRequestByMoving(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  await requireAdmin();
+  const eventId = formData.get("eventId");
+  const requestId = formData.get("requestId");
+  const newSlotId = formData.get("newSlotId");
+  if (
+    typeof eventId !== "string" ||
+    !UUID_PATTERN.test(eventId) ||
+    typeof requestId !== "string" ||
+    !UUID_PATTERN.test(requestId) ||
+    typeof newSlotId !== "string" ||
+    !UUID_PATTERN.test(newSlotId)
+  ) {
+    return { ok: false, error: "The request or new time slot is invalid." };
+  }
+
+  const rows = await db
+    .select({
+      status: attorneyRescheduleRequests.status,
+      assignmentId: attorneyRescheduleRequests.assignmentId,
+    })
+    .from(attorneyRescheduleRequests)
+    .where(
+      and(
+        eq(attorneyRescheduleRequests.id, requestId),
+        eq(attorneyRescheduleRequests.eventId, eventId)
+      )
+    )
+    .limit(1);
+  const request = rows[0];
+  if (!request || !isRescheduleStatus(request.status)) {
+    return { ok: false, error: "That request was not found in this event." };
+  }
+  const current = effectiveRescheduleStatus(request.status, request.assignmentId);
+  if (
+    !canTransitionRescheduleRequest(
+      "staff",
+      current,
+      "resolved_rescheduled"
+    )
+  ) {
+    return { ok: false, error: "That request can no longer be rescheduled." };
+  }
+
+  const actorId = await staffActorId();
+  try {
+    const result = await db.execute<{
+      moved: string | number;
+      resolved: string | number;
+    }>(
+      atomicRescheduleStatement({
+        eventId,
+        requestId,
+        newSlotId,
+        actorId,
+      })
+    );
+    const counts = result.rows[0];
+    if (Number(counts?.moved) !== 1 || Number(counts?.resolved) !== 1) {
+      return {
+        ok: false,
+        error:
+          "Nothing changed. Choose a different same-event slot that is available for this attorney.",
+      };
+    }
+  } catch (error) {
+    if (constraintViolated(error, "assignments_attorney_slot_unique")) {
+      return {
+        ok: false,
+        error: "That attorney was just booked for this time. Choose another slot.",
+      };
+    }
+    if (constraintViolated(error, "assignments_company_slot_unique")) {
+      return {
+        ok: false,
+        error: "That company already has an interview in this time slot.",
+      };
+    }
+    throw error;
+  }
+
   revalidate(eventId);
   return { ok: true };
 }

@@ -12,7 +12,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
+      <div className="grid w-full max-w-4xl gap-4 sm:grid-cols-3">
         <Link
           href="/portal"
           className="rounded-xl border bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
@@ -26,6 +26,20 @@ export default function HomePage() {
           </p>
           <span className="mt-4 inline-block text-sm font-medium text-slate-700 underline-offset-2 group-hover:underline">
             Enter invite code →
+          </span>
+        </Link>
+
+        <Link
+          href="/attorney/login"
+          className="rounded-xl border bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+        >
+          <h2 className="text-lg font-semibold text-slate-900">Attorneys</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Sign in by email to view and print your interview schedule or ask
+            staff to reschedule an interview.
+          </p>
+          <span className="mt-4 inline-block text-sm font-medium text-slate-700 underline-offset-2 group-hover:underline">
+            Attorney sign in →
           </span>
         </Link>
 
