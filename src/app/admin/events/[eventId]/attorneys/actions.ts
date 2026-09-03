@@ -7,6 +7,13 @@ import { revalidatePath } from "next/cache";
 import { getRole } from "@/lib/auth";
 import { constraintViolated } from "@/lib/db/errors";
 import { saveResume, deleteResume, resumeRelativePath } from "@/lib/storage";
+import {
+  ORGANIZATION_TYPES,
+  PRACTICE_AREAS,
+  parsePracticeAreas,
+  serializePracticeAreas,
+  type PracticeAreaEntry,
+} from "@/lib/practice-areas";
 
 const MAX_RESUME_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -23,7 +30,15 @@ function revalidateAttorneys(eventId: string) {
   revalidatePath("/admin");
 }
 
-function parseAttorneyFields(formData: FormData) {
+type ExistingTaxonomy = {
+  organizationType: string | null;
+  practiceAreas: unknown;
+};
+
+function parseAttorneyFields(
+  formData: FormData,
+  existing?: ExistingTaxonomy
+) {
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -32,11 +47,82 @@ function parseAttorneyFields(formData: FormData) {
   if (!email) return { error: "Email is required." };
   if (!firm) return { error: "Firm is required." };
 
-  const practiceAreasRaw = (formData.get("practiceAreas") as string) ?? "";
-  const practiceAreas = practiceAreasRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const submittedOrganizationType = String(
+    formData.get("organizationType") ?? ""
+  );
+  const organizationType =
+    submittedOrganizationType === existing?.organizationType
+      ? submittedOrganizationType
+      : submittedOrganizationType.trim();
+  const canonicalOrganizationTypes = ORGANIZATION_TYPES as readonly string[];
+  if (
+    organizationType &&
+    !canonicalOrganizationTypes.includes(organizationType) &&
+    organizationType !== existing?.organizationType
+  ) {
+    return {
+      error:
+        "Choose a listed organization type. An imported legacy value may only be preserved unchanged.",
+    };
+  }
+
+  const areas = formData.getAll("practiceArea").map(String);
+  const percentages = formData.getAll("practicePercent").map((value) =>
+    String(value).trim()
+  );
+  const existingAreas = new Set(
+    parsePracticeAreas(existing?.practiceAreas).entries.map((entry) => entry.area)
+  );
+  const canonicalAreas = PRACTICE_AREAS as readonly string[];
+  const practiceAreas: PracticeAreaEntry[] = [];
+
+  for (const [index, area] of areas.entries()) {
+    const percentText = percentages[index] ?? "";
+    if (!area.trim()) {
+      if (percentText) return { error: "Choose a practice area for each percentage." };
+      continue;
+    }
+    if (!canonicalAreas.includes(area) && !existingAreas.has(area)) {
+      return {
+        error:
+          "Choose listed practice areas. An imported legacy label may only be preserved unchanged.",
+      };
+    }
+    if (!percentText) {
+      return {
+        error:
+          "Supply a percentage for each practice area. Percentages in a newly submitted edit must total 100%.",
+      };
+    }
+    const percent = Number(percentText);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      return { error: "Practice-area percentages must be numbers from 0 to 100." };
+    }
+    practiceAreas.push({ area, percent });
+  }
+
+  if (practiceAreas.length > 2) {
+    return {
+      error:
+        "A newly submitted edit may contain at most two practice areas. Remove extra imported areas before saving.",
+    };
+  }
+  if (
+    new Set(practiceAreas.map((entry) => entry.area.toLocaleLowerCase("en-US")))
+      .size !== practiceAreas.length
+  ) {
+    return { error: "Choose each practice area only once." };
+  }
+  const percentageTotal = practiceAreas.reduce(
+    (total, entry) => total + (entry.percent ?? 0),
+    0
+  );
+  if (practiceAreas.length > 0 && Math.abs(percentageTotal - 100) > 0.000001) {
+    return {
+      error:
+        "Practice-area percentages in a newly submitted edit must total 100%.",
+    };
+  }
 
   return {
     fields: {
@@ -46,8 +132,8 @@ function parseAttorneyFields(formData: FormData) {
       firm,
       phone: (formData.get("phone") as string)?.trim() || null,
       city: (formData.get("city") as string)?.trim() || null,
-      organizationType: (formData.get("organizationType") as string)?.trim() || null,
-      practiceAreas,
+      organizationType: organizationType || null,
+      practiceAreas: serializePracticeAreas(practiceAreas),
     },
   };
 }
@@ -81,7 +167,13 @@ export async function updateAttorney(
   await requireAdmin();
   const eventId = formData.get("eventId") as string;
   const attorneyId = formData.get("attorneyId") as string;
-  const parsed = parseAttorneyFields(formData);
+  const existing = await db.query.attorneys.findFirst({
+    where: and(eq(attorneys.id, attorneyId), eq(attorneys.eventId, eventId)),
+    columns: { organizationType: true, practiceAreas: true },
+  });
+  if (!existing) return { ok: false, error: "Attorney not found." };
+
+  const parsed = parseAttorneyFields(formData, existing);
   if ("error" in parsed) return { ok: false, error: parsed.error };
 
   try {
@@ -122,44 +214,110 @@ async function recomputeIsUnavailable(attorneyId: string): Promise<void> {
     .where(eq(attorneys.id, attorneyId));
 }
 
-export async function addUnavailability(formData: FormData) {
+export async function addUnavailability(
+  _prevOrFormData: ActionResult | FormData,
+  submittedFormData?: FormData
+): Promise<ActionResult> {
   await requireAdmin();
+  const formData = submittedFormData ?? (_prevOrFormData as FormData);
   const eventId = formData.get("eventId") as string;
   const attorneyId = formData.get("attorneyId") as string;
   const scope = formData.get("scope") as string; // "day" | "slot"
   const note = (formData.get("note") as string)?.trim() || null;
 
-  if (scope === "day") {
-    const eventDayId = formData.get("eventDayId") as string;
-    if (!eventDayId) throw new Error("Pick a day to block.");
-    await db.insert(attorneyUnavailability).values({ attorneyId, eventDayId, note });
-  } else {
-    const timeSlotId = formData.get("timeSlotId") as string;
-    if (!timeSlotId) throw new Error("Pick a time slot to block.");
-    await db.insert(attorneyUnavailability).values({ attorneyId, timeSlotId, note });
+  if (!eventId || !attorneyId) {
+    return { ok: false, error: "The attorney or event is no longer available." };
   }
 
-  await recomputeIsUnavailable(attorneyId);
+  let availabilityValues:
+    | { attorneyId: string; eventDayId: string }
+    | { attorneyId: string; timeSlotId: string };
+  if (scope === "day") {
+    const eventDayId = formData.get("eventDayId") as string;
+    if (!eventDayId) return { ok: false, error: "Pick a day to block." };
+    availabilityValues = { attorneyId, eventDayId };
+  } else if (scope === "slot") {
+    const timeSlotId = formData.get("timeSlotId") as string;
+    if (!timeSlotId) return { ok: false, error: "Pick a time slot to block." };
+    availabilityValues = { attorneyId, timeSlotId };
+  } else {
+    return { ok: false, error: "Choose a valid availability-block type." };
+  }
+
+  try {
+    await db
+      .insert(attorneyUnavailability)
+      .values({ ...availabilityValues, note });
+  } catch (error) {
+    console.error("Failed to add attorney unavailability", error);
+    return {
+      ok: false,
+      error: "Could not add that availability block. Refresh and try again.",
+    };
+  }
+
+  try {
+    await recomputeIsUnavailable(attorneyId);
+  } catch (error) {
+    console.error("Failed to refresh attorney availability status", error);
+    revalidateAttorneys(eventId);
+    return {
+      ok: false,
+      error:
+        "The block was saved, but the availability status could not be refreshed.",
+    };
+  }
+
   revalidateAttorneys(eventId);
+  return { ok: true };
 }
 
-export async function removeUnavailability(formData: FormData) {
+export async function removeUnavailability(
+  _prevOrFormData: ActionResult | FormData,
+  submittedFormData?: FormData
+): Promise<ActionResult> {
   await requireAdmin();
+  const formData =
+    submittedFormData ?? (_prevOrFormData as FormData);
   const eventId = formData.get("eventId") as string;
   const id = formData.get("id") as string;
   const attorneyId = formData.get("attorneyId") as string;
 
-  await db
-    .delete(attorneyUnavailability)
-    .where(
-      and(
-        eq(attorneyUnavailability.id, id),
-        eq(attorneyUnavailability.attorneyId, attorneyId)
-      )
-    );
+  if (!eventId || !id || !attorneyId) {
+    return { ok: false, error: "That availability block is no longer available." };
+  }
 
-  await recomputeIsUnavailable(attorneyId);
+  try {
+    await db
+      .delete(attorneyUnavailability)
+      .where(
+        and(
+          eq(attorneyUnavailability.id, id),
+          eq(attorneyUnavailability.attorneyId, attorneyId)
+        )
+      );
+  } catch (error) {
+    console.error("Failed to remove attorney unavailability", error);
+    return {
+      ok: false,
+      error: "Could not remove that availability block. Refresh and try again.",
+    };
+  }
+
+  try {
+    await recomputeIsUnavailable(attorneyId);
+  } catch (error) {
+    console.error("Failed to refresh attorney availability status", error);
+    revalidateAttorneys(eventId);
+    return {
+      ok: false,
+      error:
+        "The block was removed, but the availability status could not be refreshed.",
+    };
+  }
+
   revalidateAttorneys(eventId);
+  return { ok: true };
 }
 
 export async function withdrawAttorney(formData: FormData) {

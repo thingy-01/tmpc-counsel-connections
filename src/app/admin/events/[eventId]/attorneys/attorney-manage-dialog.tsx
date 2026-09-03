@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import {
   uploadResume,
   removeResume,
   deleteAttorney,
+  type ActionResult,
 } from "./actions";
 import { EditAttorneySection } from "./attorney-form";
 
@@ -60,6 +61,15 @@ export default function AttorneyManageDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [scope, setScope] = useState<"day" | "slot">("slot");
+  const [availabilityState, availabilityAction, availabilityPending] =
+    useActionState(
+      async (_previous: ActionResult, formData: FormData) => {
+        return formData.get("availabilityAction") === "remove"
+          ? removeUnavailability(_previous, formData)
+          : addUnavailability(_previous, formData);
+      },
+      { ok: false } satisfies ActionResult
+    );
   const isWithdrawn = attorney.status === "withdrawn";
 
   // Group slots by day for the <optgroup>s.
@@ -150,11 +160,17 @@ export default function AttorneyManageDialog({
                         <span className="text-slate-500"> — {b.note}</span>
                       )}
                     </span>
-                    <form action={removeUnavailability}>
+                    <form action={availabilityAction}>
                       <input type="hidden" name="eventId" value={eventId} />
                       <input type="hidden" name="attorneyId" value={attorney.id} />
                       <input type="hidden" name="id" value={b.id} />
-                      <Button type="submit" variant="ghost" size="xs">
+                      <input type="hidden" name="availabilityAction" value="remove" />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="xs"
+                        disabled={availabilityPending}
+                      >
                         Remove
                       </Button>
                     </form>
@@ -164,12 +180,13 @@ export default function AttorneyManageDialog({
             )}
 
             <form
-              action={addUnavailability}
+              action={availabilityAction}
               className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
             >
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="attorneyId" value={attorney.id} />
               <input type="hidden" name="scope" value={scope} />
+              <input type="hidden" name="availabilityAction" value="add" />
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -196,7 +213,12 @@ export default function AttorneyManageDialog({
               </div>
 
               {scope === "day" ? (
-                <select name="eventDayId" className={inputClass} defaultValue="">
+                <select
+                  name="eventDayId"
+                  className={inputClass}
+                  defaultValue=""
+                  required
+                >
                   <option value="" disabled>
                     Select a day…
                   </option>
@@ -207,7 +229,12 @@ export default function AttorneyManageDialog({
                   ))}
                 </select>
               ) : (
-                <select name="timeSlotId" className={inputClass} defaultValue="">
+                <select
+                  name="timeSlotId"
+                  className={inputClass}
+                  defaultValue=""
+                  required
+                >
                   <option value="" disabled>
                     Select a time slot…
                   </option>
@@ -228,8 +255,18 @@ export default function AttorneyManageDialog({
                 placeholder="Reason (e.g. panel duty)"
                 className={inputClass}
               />
-              <Button type="submit" size="sm">
-                Add block
+              {availabilityState.error && (
+                <p className="text-sm text-red-600">
+                  {availabilityState.error}
+                </p>
+              )}
+              {availabilityState.ok && (
+                <p className="text-sm text-emerald-600">
+                  Availability updated.
+                </p>
+              )}
+              <Button type="submit" size="sm" disabled={availabilityPending}>
+                {availabilityPending ? "Updating…" : "Add block"}
               </Button>
             </form>
           </section>

@@ -10,6 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { addAttorney, updateAttorney, type ActionResult } from "./actions";
+import {
+  ORGANIZATION_TYPES,
+  PRACTICE_AREAS,
+  isCanonicalOrganizationType,
+  isCanonicalPracticeArea,
+  parsePracticeAreas,
+} from "@/lib/practice-areas";
 
 const inputClass =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
@@ -28,10 +35,128 @@ export type AttorneyFormValues = {
   practiceAreas?: unknown;
 };
 
+type EditorRow = { area: string; percent: string };
+
+function PracticeAreaEditor({ value }: { value: unknown }) {
+  const parsed = parsePracticeAreas(value);
+  const [rows, setRows] = useState<EditorRow[]>(() =>
+    parsed.entries.length > 0
+      ? parsed.entries.map((entry) => ({
+          area: entry.area,
+          percent: entry.percent?.toString() ?? "",
+        }))
+      : [{ area: "", percent: "" }]
+  );
+
+  function updateRow(index: number, update: Partial<EditorRow>) {
+    setRows((current) =>
+      current.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...update } : row
+      )
+    );
+  }
+
+  function removeRow(index: number) {
+    setRows((current) => {
+      const next = current.filter((_, rowIndex) => rowIndex !== index);
+      return next.length > 0 ? next : [{ area: "", percent: "" }];
+    });
+  }
+
+  return (
+    <div className="space-y-2 sm:col-span-2">
+      <div>
+        <p className="text-xs font-medium text-slate-600">Practice areas</p>
+        <p className="text-xs text-slate-400">
+          Choose up to two. Supplied percentages must total 100%.
+        </p>
+      </div>
+      {parsed.incomplete && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+          Incomplete imported data: this record has missing percentages or more
+          than two areas. It has not been changed automatically.
+        </p>
+      )}
+      {rows.map((row, index) => {
+        const exactCanonical = (PRACTICE_AREAS as readonly string[]).includes(
+          row.area
+        );
+        return (
+          <div key={index} className="grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
+            <select
+              name="practiceArea"
+              aria-label={`Practice area ${index + 1}`}
+              value={row.area}
+              onChange={(event) => updateRow(index, { area: event.target.value })}
+              className={inputClass}
+            >
+              <option value="">Select a practice area…</option>
+              {row.area && !exactCanonical && (
+                <option value={row.area}>
+                  {row.area} (
+                  {isCanonicalPracticeArea(row.area)
+                    ? "stored spelling"
+                    : "stored legacy value"}
+                  )
+                </option>
+              )}
+              {PRACTICE_AREAS.map((area) => (
+                <option key={area} value={area}>
+                  {area}
+                </option>
+              ))}
+            </select>
+            <div className="relative">
+              <input
+                type="number"
+                name="practicePercent"
+                aria-label={`Practice area ${index + 1} percentage`}
+                min="0"
+                max="100"
+                step="0.01"
+                value={row.percent}
+                onChange={(event) =>
+                  updateRow(index, { percent: event.target.value })
+                }
+                placeholder="Percent"
+                className={`${inputClass} pr-7`}
+              />
+              <span className="pointer-events-none absolute right-2 top-1.5 text-sm text-slate-400">
+                %
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => removeRow(index)}
+            >
+              Remove
+            </Button>
+          </div>
+        );
+      })}
+      {rows.length < 2 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setRows((current) => [...current, { area: "", percent: "" }])
+          }
+        >
+          Add second area
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function AttorneyFields({ attorney }: { attorney?: AttorneyFormValues }) {
-  const areas = Array.isArray(attorney?.practiceAreas)
-    ? (attorney!.practiceAreas as string[]).join(", ")
-    : "";
+  const organizationType = attorney?.organizationType ?? "";
+  const exactCanonicalOrganization = (
+    ORGANIZATION_TYPES as readonly string[]
+  ).includes(organizationType);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div>
@@ -66,24 +191,32 @@ export function AttorneyFields({ attorney }: { attorney?: AttorneyFormValues }) 
         <label className="mb-1 block text-xs font-medium text-slate-600">
           Organization type
         </label>
-        <input
+        <select
           name="organizationType"
           defaultValue={attorney?.organizationType ?? ""}
-          placeholder="e.g. Minority-Owned Firm"
           className={inputClass}
-        />
+        >
+          <option value="">Select an organization type…</option>
+          {organizationType && !exactCanonicalOrganization && (
+            <option value={organizationType}>
+              {organizationType} (
+              {isCanonicalOrganizationType(organizationType)
+                ? "stored spelling"
+                : "stored legacy value"}
+              )
+            </option>
+          )}
+          {ORGANIZATION_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
       </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">
-          Practice areas (comma-separated)
-        </label>
-        <input
-          name="practiceAreas"
-          defaultValue={areas}
-          placeholder="Litigation, Labor & Employment"
-          className={inputClass}
-        />
-      </div>
+      <PracticeAreaEditor
+        key={JSON.stringify(parsePracticeAreas(attorney?.practiceAreas).entries)}
+        value={attorney?.practiceAreas}
+      />
     </div>
   );
 }
@@ -135,12 +268,22 @@ export function EditAttorneySection({
   attorney: AttorneyFormValues & { id: string };
 }) {
   const [state, formAction, pending] = useActionState(updateAttorney, idle);
+  const fieldKey = JSON.stringify([
+    attorney.firstName,
+    attorney.lastName,
+    attorney.email,
+    attorney.phone,
+    attorney.firm,
+    attorney.city,
+    attorney.organizationType,
+    parsePracticeAreas(attorney.practiceAreas).entries,
+  ]);
 
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="attorneyId" value={attorney.id} />
-      <AttorneyFields attorney={attorney} />
+      <AttorneyFields key={fieldKey} attorney={attorney} />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.ok && <p className="text-sm text-emerald-600">Saved.</p>}
       <Button type="submit" size="sm" disabled={pending}>

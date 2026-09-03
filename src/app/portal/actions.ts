@@ -8,6 +8,18 @@ import { setCompanySession, clearCompanySession } from "@/lib/session";
 
 export type LoginResult = { ok: boolean; error?: string };
 
+type CompanyProfileContact = {
+  contactName: string | null | undefined;
+  contactEmail: string | null | undefined;
+};
+
+/** The single onboarding-completeness rule shared by login and portal UI. */
+export async function isCompanyProfileComplete(
+  company: CompanyProfileContact
+): Promise<boolean> {
+  return Boolean(company.contactName?.trim() && company.contactEmail?.trim());
+}
+
 /**
  * Email-free company login. The company enters the invite code TMCP issued
  * them; we verify it and set a signed session cookie. No email, no Clerk
@@ -21,7 +33,12 @@ export async function loginCompany(
   if (!code) return { ok: false, error: "Enter your invite code." };
 
   const rows = await db
-    .select({ id: companies.id, status: companies.status })
+    .select({
+      id: companies.id,
+      status: companies.status,
+      contactName: companies.contactName,
+      contactEmail: companies.contactEmail,
+    })
     .from(companies)
     .where(eq(companies.inviteCode, code))
     .limit(1);
@@ -39,7 +56,11 @@ export async function loginCompany(
       .where(eq(companies.id, company.id));
   }
 
-  redirect("/portal");
+  redirect(
+    (await isCompanyProfileComplete(company))
+      ? "/portal/schedule"
+      : "/portal/profile"
+  );
 }
 
 export async function logoutCompany(): Promise<void> {

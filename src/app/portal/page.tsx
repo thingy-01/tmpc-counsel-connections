@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Link from "next/link";
+import { isCompanyProfileComplete } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,8 @@ export default async function PortalHome() {
     return <div className="text-slate-500">Company not found.</div>;
   }
 
+  const profileComplete = await isCompanyProfileComplete(company);
+
   const startDate = new Date(event.startDate + "T00:00:00").toLocaleDateString(
     "en-US",
     { weekday: "long", month: "long", day: "numeric", year: "numeric" }
@@ -87,7 +90,7 @@ export default async function PortalHome() {
       </div>
 
       {/* Prompt new companies to complete their profile. */}
-      {(!company.contactName || !company.contactEmail) && (
+      {!profileComplete && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">
             Welcome! Please complete your company profile.

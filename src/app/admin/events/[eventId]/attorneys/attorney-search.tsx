@@ -7,10 +7,10 @@ import {
   type UnavailabilityBlock,
 } from "@/components/attorney-picker";
 import AttorneyManageDialog, {
-  type ManageableAttorney,
   type DayOption,
   type SlotOption,
 } from "./attorney-manage-dialog";
+import { parsePracticeAreas } from "@/lib/practice-areas";
 
 type Attorney = {
   id: string;
@@ -61,7 +61,10 @@ export default function AttorneySearch({
 }) {
   const [query, setQuery] = useState("");
   const [orgFilter, setOrgFilter] = useState("all");
-  const [managing, setManaging] = useState<Attorney | null>(null);
+  const [managingId, setManagingId] = useState<string | null>(null);
+  const managing = managingId
+    ? attorneys.find((attorney) => attorney.id === managingId) ?? null
+    : null;
 
   const orgTypes = useMemo(() => {
     const types = new Set<string>();
@@ -123,6 +126,7 @@ export default function AttorneySearch({
               <th className="px-4 py-3 text-left font-medium text-slate-600">Firm</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">City</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Org Type</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Practice Areas</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
               <th className="px-4 py-3 text-left font-medium text-slate-600">Resume</th>
               <th className="px-4 py-3 text-right font-medium text-slate-600"></th>
@@ -131,6 +135,7 @@ export default function AttorneySearch({
           <tbody className="divide-y">
             {filtered.map((a) => {
               const isWithdrawn = a.status === "withdrawn";
+              const practiceAreaData = parsePracticeAreas(a.practiceAreas);
               return (
                 <tr
                   key={a.id}
@@ -143,6 +148,27 @@ export default function AttorneySearch({
                   <td className="px-4 py-2.5 text-slate-500">{a.city ?? "—"}</td>
                   <td className="px-4 py-2.5">
                     <OrgTypeBadge orgType={a.organizationType} />
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">
+                    {practiceAreaData.entries.length > 0 ? (
+                      <div className="space-y-0.5">
+                        {practiceAreaData.entries.map((entry, index) => (
+                          <p key={`${entry.area}-${index}`}>
+                            {entry.area}
+                            {entry.percent !== undefined
+                              ? ` · ${entry.percent}%`
+                              : ""}
+                          </p>
+                        ))}
+                        {practiceAreaData.incomplete && (
+                          <p className="font-medium text-amber-700">
+                            Incomplete imported data
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     {isWithdrawn ? (
@@ -175,7 +201,7 @@ export default function AttorneySearch({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setManaging(a)}
+                      onClick={() => setManagingId(a.id)}
                     >
                       Manage
                     </Button>
@@ -195,11 +221,11 @@ export default function AttorneySearch({
       {managing && (
         <AttorneyManageDialog
           eventId={eventId}
-          attorney={managing as ManageableAttorney}
+          attorney={managing}
           days={days}
           slots={slots}
-          open={!!managing}
-          onOpenChange={(open) => !open && setManaging(null)}
+          open
+          onOpenChange={(open) => !open && setManagingId(null)}
         />
       )}
     </div>
