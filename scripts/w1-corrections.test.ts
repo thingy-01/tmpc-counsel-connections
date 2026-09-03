@@ -23,6 +23,24 @@ mock.module("next/cache", {
   namedExports: { revalidatePath: () => undefined },
 });
 
+const testCookieValues = new Map<string, string>();
+mock.module("next/headers", {
+  namedExports: {
+    cookies: async () => ({
+      get: (name: string) => {
+        const value = testCookieValues.get(name);
+        return value === undefined ? undefined : { name, value };
+      },
+      set: (name: string, value: string) => {
+        testCookieValues.set(name, value);
+      },
+      delete: (name: string) => {
+        testCookieValues.delete(name);
+      },
+    }),
+  },
+});
+
 const envFile = process.env.COUNSEL_TEST_ENV_FILE;
 if (envFile) {
   if (!isAbsolute(envFile)) {
@@ -231,7 +249,7 @@ test("assigned contact projection excludes unrelated attorney contact data", asy
   );
 });
 
-test("attorney POST policy accepts the browser no-referrer form shape", async () => {
+test("same-origin policy accepts a browser no-referrer form shape", async () => {
   const { isSameOriginRequest } = await import("../src/lib/same-origin");
   const url = "https://counsel.example/attorney/callback";
   assert.equal(isSameOriginRequest(new Request(url)), false);
@@ -429,6 +447,38 @@ test("misconfigured production attorney callback fails closed without a 500", as
   }
 });
 
+test("invalid attorney callback redirects to the public login origin", async () => {
+  const callback = await import("../src/app/attorney/callback/route");
+  const mutableEnvironment = process.env as Record<string, string | undefined>;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousSecret = process.env.ATTORNEY_SESSION_SECRET;
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  mutableEnvironment.NODE_ENV = "production";
+  mutableEnvironment.ATTORNEY_SESSION_SECRET = "a".repeat(32);
+  mutableEnvironment.NEXT_PUBLIC_APP_URL = "https://counsel-connections.org";
+  testCookieValues.clear();
+  try {
+    const response = await callback.GET(
+      new Request("http://railway.internal:8080/attorney/callback?token=invalid")
+    );
+    assert.equal(response.status, 303);
+    assert.equal(
+      response.headers.get("location"),
+      "https://counsel-connections.org/attorney/login?error=invalid"
+    );
+    assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
+    assert.equal(testCookieValues.has("tmcp_attorney"), false);
+  } finally {
+    testCookieValues.clear();
+    if (previousNodeEnv === undefined) delete mutableEnvironment.NODE_ENV;
+    else mutableEnvironment.NODE_ENV = previousNodeEnv;
+    if (previousSecret === undefined) delete mutableEnvironment.ATTORNEY_SESSION_SECRET;
+    else mutableEnvironment.ATTORNEY_SESSION_SECRET = previousSecret;
+    if (previousAppUrl === undefined) delete mutableEnvironment.NEXT_PUBLIC_APP_URL;
+    else mutableEnvironment.NEXT_PUBLIC_APP_URL = previousAppUrl;
+  }
+});
+
 test(
   "interviewer edits validate ownership and stop when scheduling closes",
   { skip: !envFile },
@@ -502,7 +552,7 @@ test(
 );
 
 test(
-  "local callback checks do not consume tokens and redemption stays atomic",
+  "attorney callback GET consumes once and redirects directly to the public schedule",
   { skip: !envFile },
   async () => {
     requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
@@ -515,6 +565,10 @@ test(
     const expiredToken = randomBytes(32).toString("base64url");
     const expiredHash = createHash("sha256").update(expiredToken).digest("hex");
     let testEventId: string | undefined;
+    const mutableEnvironment = process.env as Record<string, string | undefined>;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousSecret = process.env.ATTORNEY_SESSION_SECRET;
+    const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
     try {
       const enrollment = await createLocalEnrollment(pool, randomUUID());
@@ -526,40 +580,40 @@ test(
         [enrollment.attorneyId, enrollment.eventId, tokenHash, expiredHash]
       );
 
-      const callbackUrl = `http://127.0.0.1/attorney/callback?token=${token}`;
+      mutableEnvironment.NODE_ENV = "production";
+      mutableEnvironment.ATTORNEY_SESSION_SECRET = "a".repeat(32);
+      mutableEnvironment.NEXT_PUBLIC_APP_URL = "https://counsel-connections.org";
+      testCookieValues.clear();
+
+      const callbackUrl = `http://railway.internal:8080/attorney/callback?token=${token}`;
       const firstGet = await callback.GET(new Request(callbackUrl));
-      const secondGet = await callback.GET(new Request(callbackUrl));
-      assert.equal(firstGet.status, 200);
-      assert.equal(secondGet.status, 200);
-      assert.equal(firstGet.headers.get("set-cookie"), null);
+      assert.equal(firstGet.status, 303);
+      assert.equal(
+        firstGet.headers.get("location"),
+        "https://counsel-connections.org/attorney/schedule"
+      );
       assert.equal(firstGet.headers.get("cache-control"), "private, no-store, max-age=0");
       assert.equal(firstGet.headers.get("referrer-policy"), "no-referrer");
-      const html = await firstGet.text();
-      assert.match(html, /method="post"/);
-      assert.doesNotMatch(html, /<script|<img|<link/i);
-      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
+      assert.match(testCookieValues.get("tmcp_attorney") ?? "", /^[^.]+\.[A-Za-z0-9_-]+$/);
 
-      const foreignPost = await callback.POST(
-        new Request("http://127.0.0.1/attorney/callback", {
-          method: "POST",
-          headers: {
-            origin: "https://attacker.example",
-            "content-type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({ token }),
-        })
+      testCookieValues.clear();
+      const secondGet = await callback.GET(new Request(callbackUrl));
+      assert.equal(secondGet.status, 303);
+      assert.equal(
+        secondGet.headers.get("location"),
+        "https://counsel-connections.org/attorney/login?error=invalid"
       );
-      assert.equal(foreignPost.status, 303);
-      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
-
-      const [firstConsume, secondConsume] = await Promise.all([
-        auth.consumeAttorneyToken(token),
-        auth.consumeAttorneyToken(token),
-      ]);
-      assert.equal([firstConsume, secondConsume].filter(Boolean).length, 1);
+      assert.equal(testCookieValues.has("tmcp_attorney"), false);
       assert.equal(await auth.consumeAttorneyToken(token), null);
       assert.equal(await auth.consumeAttorneyToken(expiredToken), null);
     } finally {
+      testCookieValues.clear();
+      if (previousNodeEnv === undefined) delete mutableEnvironment.NODE_ENV;
+      else mutableEnvironment.NODE_ENV = previousNodeEnv;
+      if (previousSecret === undefined) delete mutableEnvironment.ATTORNEY_SESSION_SECRET;
+      else mutableEnvironment.ATTORNEY_SESSION_SECRET = previousSecret;
+      if (previousAppUrl === undefined) delete mutableEnvironment.NEXT_PUBLIC_APP_URL;
+      else mutableEnvironment.NEXT_PUBLIC_APP_URL = previousAppUrl;
       await pool.query(
         `delete from attorney_tokens where token_hash = any($1::text[])`,
         [[tokenHash, expiredHash]]
