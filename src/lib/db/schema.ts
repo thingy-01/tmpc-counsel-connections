@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   unique,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ============================================================
@@ -254,4 +255,43 @@ export const adminUsers = pgTable("admin_users", {
   name: text("name"),
   email: text("email"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// ============================================================
+// 12. attorney_tokens
+// ============================================================
+export const attorneyTokens = pgTable(
+  "attorney_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attorneyId: uuid("attorney_id")
+      .notNull()
+      .references(() => attorneys.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("attorney_tokens_attorney_event_idx").on(
+      table.attorneyId,
+      table.eventId
+    ),
+  ]
+);
+
+// ============================================================
+// 13. attorney_login_rate_limits
+// ============================================================
+export const attorneyLoginRateLimits = pgTable("attorney_login_rate_limits", {
+  normalizedEmail: text("normalized_email").primaryKey(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  attempts: integer("attempts").notNull().default(1),
 });

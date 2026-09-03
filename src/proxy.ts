@@ -9,8 +9,16 @@ import { getDevAuth } from "@/lib/dev-auth";
 const ADMIN_ORG_ROLE = "org:admin";
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
+const isPublicAttorneyAuthRoute = createRouteMatcher([
+  "/attorney/login(.*)",
+  "/attorney/callback(.*)",
+]);
 
 const clerk = clerkMiddleware(async (auth, req) => {
+  // Attorney authentication is wholly separate from Clerk and must work with
+  // no Clerk session. Staff protection below remains unchanged.
+  if (isPublicAttorneyAuthRoute(req)) return NextResponse.next();
+
   // Only /admin requires Clerk. The company portal and the resume route use the
   // email-free invite-code session and are gated in-app (see src/lib/auth.ts),
   // so we never force a Clerk sign-in (and its email step) on them.

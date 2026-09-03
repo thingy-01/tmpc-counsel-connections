@@ -1,11 +1,17 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { companies } from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { attorneys, companies } from "@/lib/db/schema";
+import { and, asc, eq } from "drizzle-orm";
 import { getDevAuth } from "@/lib/dev-auth";
-import { getCompanySessionId } from "@/lib/session";
+import { getAttorneySession, getCompanySessionId } from "@/lib/session";
 
 export type UserRole = "admin" | "company" | null;
+
+export type AttorneyIdentity = {
+  role: "attorney";
+  attorneyId: string;
+  eventId: string;
+};
 
 /** Clerk's built-in admin role key for organization members. */
 export const ADMIN_ORG_ROLE = "org:admin";
@@ -101,4 +107,33 @@ export async function getCompanyId(): Promise<string | null> {
     .where(eq(companies.clerkUserId, userId))
     .limit(1);
   return rows[0]?.id ?? null;
+}
+
+/**
+ * Resolve the isolated attorney identity and revalidate its exact enrollment.
+ * This deliberately does not participate in getRole() or company resolution:
+ * a parallel/stale cookie for another portal cannot change the selected role.
+ */
+export async function getAttorneyIdentity(): Promise<AttorneyIdentity | null> {
+  const session = await getAttorneySession();
+  if (!session) return null;
+
+  const rows = await db
+    .select({ id: attorneys.id, eventId: attorneys.eventId })
+    .from(attorneys)
+    .where(
+      and(
+        eq(attorneys.id, session.attorneyId),
+        eq(attorneys.eventId, session.eventId)
+      )
+    )
+    .limit(1);
+  const enrollment = rows[0];
+  if (!enrollment) return null;
+
+  return {
+    role: "attorney",
+    attorneyId: enrollment.id,
+    eventId: enrollment.eventId,
+  };
 }
