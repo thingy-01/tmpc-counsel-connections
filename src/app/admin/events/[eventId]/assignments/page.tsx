@@ -15,6 +15,8 @@ import ScheduleGrid, {
   type GridAttorney,
   type GridDay,
 } from "./schedule-grid";
+import PrintButton from "@/app/portal/schedule/review/print-button";
+import { fmtTime } from "@/lib/format";
 
 export default async function AssignmentsPage({
   params,
@@ -135,19 +137,44 @@ export default async function AssignmentsPage({
 
   const gridAssignments: GridAssignment[] = rawAssignments;
   const totalSlots = rawSlots.length;
+  const companyById = new Map(companyList.map((company) => [company.id, company]));
+  const attorneyById = new Map(gridAttorneys.map((attorney) => [attorney.id, attorney]));
+  const slotById = new Map(rawSlots.map((slot) => [slot.id, slot]));
+  const printableAssignments = gridAssignments
+    .map((assignment) => ({
+      ...assignment,
+      company: companyById.get(assignment.companyId),
+      attorney: attorneyById.get(assignment.attorneyId),
+      slot: slotById.get(assignment.timeSlotId),
+    }))
+    .filter((assignment) => assignment.company && assignment.attorney && assignment.slot)
+    .sort((left, right) => {
+      const leftSlot = left.slot!;
+      const rightSlot = right.slot!;
+      return (
+        leftSlot.dayDate.localeCompare(rightSlot.dayDate) ||
+        leftSlot.startTime.localeCompare(rightSlot.startTime) ||
+        left.company!.name.localeCompare(right.company!.name)
+      );
+    });
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Master Schedule</h1>
+    <div className="master-schedule-print">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Master Schedule</h1>
         <p className="mt-1 text-slate-500">
           {event.name} · {gridAssignments.length} interviews assigned ·{" "}
           {companyList.length} companies · {totalSlots} time slots
         </p>
+        </div>
+        <div className="print:hidden">
+          <PrintButton />
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-slate-500 print:hidden">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded bg-emerald-100 ring-1 ring-emerald-300" />
           Assigned
@@ -159,6 +186,7 @@ export default async function AssignmentsPage({
         <span>Click any cell to schedule, change, or remove an interview.</span>
       </div>
 
+      <div className="print:hidden">
       {days.length === 0 ? (
         <div className="rounded-lg border bg-white p-10 text-center text-slate-500">
           No event days yet — set up Days &amp; Slots first.
@@ -172,6 +200,39 @@ export default async function AssignmentsPage({
           attorneys={gridAttorneys}
         />
       )}
+      </div>
+
+      <section className="print-only" aria-label="Printable master schedule">
+        <p className="mb-3 text-sm text-slate-600">
+          {event.name} · {printableAssignments.length} confirmed interviews
+        </p>
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Company</th>
+              <th>Attorney</th>
+              <th>Firm</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {printableAssignments.map((assignment) => (
+              <tr key={assignment.id}>
+                <td>{assignment.slot!.dayLabel}</td>
+                <td className="whitespace-nowrap">
+                  {fmtTime(assignment.slot!.startTime)}–{fmtTime(assignment.slot!.endTime)}
+                </td>
+                <td>{assignment.company!.name}</td>
+                <td>{assignment.attorney!.name}</td>
+                <td>{assignment.attorney!.firm}</td>
+                <td>{assignment.notes ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 }

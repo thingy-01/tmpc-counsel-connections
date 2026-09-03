@@ -2,9 +2,14 @@ import "server-only";
 
 import { LocalCaptureEmailTransport } from "./capture";
 import { ResendEmailTransport } from "./resend";
-import type { EmailMessage, EmailTransport } from "./types";
+import type { EmailMessage, EmailSendResult, EmailTransport } from "./types";
 
-export type { EmailMessage, EmailTransport } from "./types";
+export {
+  EmailDeliveryError,
+  type EmailMessage,
+  type EmailSendResult,
+  type EmailTransport,
+} from "./types";
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -31,6 +36,11 @@ export function assertAttorneyEmailConfigured(): void {
   const selected = process.env.ATTORNEY_EMAIL_TRANSPORT?.trim() || "resend";
   createTransport();
   if (selected === "resend") requiredEnvironment("ATTORNEY_EMAIL_FROM");
+}
+
+/** Shared configured transport entry point for stored notification deliveries. */
+export async function sendEmail(message: EmailMessage): Promise<EmailSendResult> {
+  return createTransport().send(message);
 }
 
 function escapeHtml(value: string): string {

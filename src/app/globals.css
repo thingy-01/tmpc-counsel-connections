@@ -124,3 +124,82 @@
     @apply bg-background text-foreground;
   }
 }
+
+.print-only {
+  display: none;
+}
+
+@page {
+  size: Letter portrait;
+  margin: 0.45in;
+}
+
+@page master-schedule {
+  size: Letter landscape;
+}
+
+@media print {
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 10pt;
+  }
+
+  nav,
+  aside,
+  details > summary,
+  button,
+  [role="dialog"],
+  .print-hidden {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .master-schedule-print {
+    max-width: none !important;
+    page: master-schedule;
+  }
+
+  .master-schedule-print h1 {
+    font-size: 18pt;
+  }
+
+  .master-schedule-print table {
+    table-layout: fixed;
+    font-size: 7.5pt;
+  }
+
+  .master-schedule-print thead {
+    display: table-header-group;
+  }
+
+  .master-schedule-print tr {
+    break-inside: avoid;
+  }
+
+  .master-schedule-print th,
+  .master-schedule-print td {
+    border: 0.5pt solid #94a3b8;
+    padding: 3pt;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+
+  .master-schedule-print th {
+    background: #e2e8f0 !important;
+    font-weight: 700;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}
