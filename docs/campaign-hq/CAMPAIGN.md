@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `9ef6a282-20a0-48cd-9668-0cd612b99b05`, successfully promoted commit `e0bd209738f4c0b3e85cfc518ce6842bd0b1edef` with corrected public attorney redirects.
+Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `77fc25db-a339-45a7-80fc-baea7a846af5`, successfully promoted commit `e4b054452f6bd1813c74f099d6a730d6b1196fbf` with direct attorney magic-link entry.
 
 ## Release candidate
 
@@ -63,6 +63,15 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 - CodeRabbit reported no findings. All 60 tests, ESLint, strict TypeScript, and the production build passed.
 - Railway deployment `9ef6a282-20a0-48cd-9668-0cd612b99b05` succeeded for `e0bd209738f4c0b3e85cfc518ce6842bd0b1edef`.
 - Live non-delivering checks returned public `counsel-connections.org` locations for login request, invalid callback, and logout redirects.
+
+## Direct attorney magic-link follow-up
+
+- A valid emailed callback now atomically consumes its one-use token, creates the attorney session, and redirects directly to `/attorney/schedule`.
+- The obsolete confirmation page and its POST action were removed after production user feedback.
+- Invalid, expired, and reused tokens still redirect to the public attorney login error page.
+- The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
+- The integrated database callback suite passed 15 of 15 tests. The default suite passed 50 tests with 11 expected database skips. ESLint, strict TypeScript, and the production build passed.
+- Railway deployment `77fc25db-a339-45a7-80fc-baea7a846af5` succeeded for `e4b054452f6bd1813c74f099d6a730d6b1196fbf`. A live invalid-token check confirmed the old confirmation page is absent and the public error redirect remains correct.
 
 ## Runtime status
 
