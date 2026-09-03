@@ -1,11 +1,18 @@
 # Campaign: Counsel Connections September feedback
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
-Status: phase 0 of 4, preflight and worker dispatch.
+Status: phase 1 of 4, Wave 1 attempt 2 running.
 
 ## Progress pulse
 - Reporting interval: concise root updates within 60 seconds during active work; substantive phase reports and at least every 15 minutes.
-- Last user report: kickoff September 3, 2026.
+- Last user report: Wave 1 attempt 2 dispatched, September 3, 2026.
 - Automatic continuation: active; implementation and live release already approved.
+
+## Wave 1 attempt 1: FAILED, no code produced
+All three W1 workers failed at `turn.failed` with `invalid_json_schema` before any model
+execution. Cause: `verify_result` in the output schema lacked `additionalProperties:false`.
+The previous conductor read only head logs and incorrectly recorded the workers as running.
+No feature code, commit, or worktree change resulted. Root fixed the schema, renamed the
+branches from `campaign/w1*` to `codex/w1*`, and replaced the conductor runtime.
 
 ## Phases and gates
 1. Foundation and data: onboarding/refresh fixes, normalized attorney practice data, previewed roster import. Evidence: tests and real browser walkthrough against isolated development DB.
@@ -16,8 +23,24 @@ Status: phase 0 of 4, preflight and worker dispatch.
 ## Fleet
 | Task | Worker | Branch | Worktree | Session | Dispatched | Status |
 |---|---|---|---|---|---|---|
-| Release preflight/local DB | Codex native agent release_preflight | none (scratch only) | work/release-preflight | /root/release_preflight | 2026-09-03 | running; expected 5 minutes |
-| Implementation conductor | Claude Opus, high | codex/counsel-connections-dev | task root | pending | 2026-09-03 | pending preflight |
+| Release preflight/local DB | Codex native agent release_preflight | none (scratch only) | work/release-preflight | /root/release_preflight | 2026-09-03 | complete; report at work/release-preflight/report.md |
+| Implementation conductor | Claude Opus 5, high | codex/counsel-connections-dev | task root | current session | 2026-09-03 | active |
+| W1A: Onboarding/practice | Codex CLI | codex/w1a-onboarding | work/trees/w1a-onboarding | attempt 2 | 2026-09-03 | running; log work/w1a-log.jsonl |
+| W1B: Attorney auth | Codex CLI | codex/w1b-attorney-auth | work/trees/w1b-attorney-auth | attempt 2 | 2026-09-03 | running; log work/w1b-log.jsonl |
+| W1C: Company scheduling | Codex CLI | codex/w1c-scheduling | work/trees/w1c-scheduling | attempt 2 | 2026-09-03 | running; log work/w1c-log.jsonl |
+
+Collection rule: read the log **tail** and the exit-status file, never the head. A
+`thread.started` line is not evidence of success.
+
+## Wave 1 scope corrections folded into briefs
+- Canonical taxonomy extracted from the registration PDF into
+  `docs/campaign-hq/reference/taxonomy.md`. It differs from the 2025 roster: the form has
+  `Taxation`, lacks `Not Applicable`, and uses shorter labels. Roster values are legacy.
+- `db.transaction()` is unusable in production (neon-http). All atomicity must be
+  single-statement SQL over the existing unique constraints.
+- The resume route `src/app/api/attorneys/[id]/resume/route.ts` had no owner and currently
+  leaks across events; assigned to W1C with an explicit role allowlist.
+- Six P1 findings in `work/reviews/auth-scheduling-precheck.md` are binding on W1B and W1C.
 
 ## Release target
 Repository: thingy-01/tmpc-counsel-connections. Baseline: 93d1a0375945ca969f67c804505f2516d727997d, equal to origin/main at kickoff.

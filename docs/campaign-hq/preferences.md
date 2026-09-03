@@ -8,3 +8,5 @@
 - Permission envelope: current desktop task is full filesystem/network access with no approval prompts. Claude subprocess uses explicit allowed tools and no-interactive-approval mode. Codex writers use workspace-write, approval_policy=never, network enabled, add writable git common dir as needed. Never ignore rules/hooks or retry rejected actions by disabling controls.
 - Preserve exact rollout boundaries: implemented vs reviewed vs integrated vs landed vs deployed vs live verified.
 - Continue autonomously. User already approved plan; do not repeat approval gates for ordinary code, tests, Git pushes, or live deployment. Do not send participant notifications during rollout.
+
+- Active Claude executable: /Users/thingy/Library/Application Support/Claude/claude-code/2.1.255/claude.app/Contents/MacOS/claude. Verified --model opus resolves to claude-opus-5; use --effort high. Legacy PATH Claude 2.1.7 resolved to Opus 4.5 and was stopped before feature writes.
