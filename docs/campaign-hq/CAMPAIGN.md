@@ -67,8 +67,11 @@ The Opus5 print-mode conductor returned a status report and exited0 at 16:13:42Z
 - Synthetic QA fixture ready counsel_campaign_qa; private configwork/release-preflight/.env.qa.local; guideqa-guide.md. No production changes.
 
 ## Current active processes (supersedes old dispatch state)
-- W2 foundation: codex/w2-foundation, work/trees/w2-foundation, Codex01a06825-9769-7620-b6e2-4e206f6d23d0, directexec46176, logwork/w2-foundation.jsonl. SheetJS0.20.3 installed via isolated npm cache after global cacheEPERM; schema implementation underway.
+- W2 foundation: complete source1bdc687, integrated4baa355, directexec46176 exit0. SheetJS0.20.3, seven additive tables, guarded test runner, spreadsheet safety, admin routes; lint/type/test/build and local migration passed.
 - W1 integration corrections: codex/w1-integration-corrections, work/trees/w1-integration-corrections, base101622d, Codex01a06826-e64b-7760-843e-85c34ea0f2a6, directexec25511, logwork/w1-corrections.jsonl. Private localDB counsel_w1_corrections/config.env.w1-corrections.local.
 - Root local QA admin Next dev: directexec49118, localhost3000, synthetic counsel_campaign_qa, W1auth additiveSQL applied only here.
 - Aside admin browser QA: directexec91183, logwork/aside-w1-admin.log, Asidesession2026-09-03_aGkMULLNkrKOtBJG. Testing local dialog refresh/availability/resume/mobile; observed city immediate save. Root must stop this server before switchingrole or building.
 - Bounded Claude design/briefs and W1snapshotreview finished (exec47107/74309 bothexit0); no backgroundworkers. Work/reviews/w1-cross-model.md is snapshot, not final integrated gate.
+
+- W2C notifications/export started from06c98cb: branchcodex/w2c-notifications, work/trees/w2c-notifications, Codex01a06832-a887-7d32-829c-01703bdae6e9, directexec3135, logwork/w2c.jsonl. Capture mail only; W1correction interfaces are compatible/disjoint and integrate later.
+- Admin QA failure evidence work/reviews/w1-browser-admin.md; responsive Opus draft integrated06c98cb and root static tests pass; browser recheck pending. Select reset diagnosis proved cancelable native reset clears controlledpractice selects and preventing reset preserves them; root must implement/recheck after correction commit.
