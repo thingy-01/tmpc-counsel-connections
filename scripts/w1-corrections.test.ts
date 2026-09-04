@@ -552,7 +552,7 @@ test(
 );
 
 test(
-  "scanner GETs preserve an attorney token and browser POST consumes it once",
+  "user-navigation GET redeems directly while scanner GETs require a safe POST",
   { skip: !envFile },
   async () => {
     requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
@@ -560,8 +560,12 @@ test(
     const pool = new Pool({ connectionString: databaseUrl });
     const auth = await import("../src/app/attorney/auth");
     const callback = await import("../src/app/attorney/callback/route");
-    const token = randomBytes(32).toString("base64url");
-    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const directToken = randomBytes(32).toString("base64url");
+    const directHash = createHash("sha256").update(directToken).digest("hex");
+    const fallbackToken = randomBytes(32).toString("base64url");
+    const fallbackHash = createHash("sha256")
+      .update(fallbackToken)
+      .digest("hex");
     const expiredToken = randomBytes(32).toString("base64url");
     const expiredHash = createHash("sha256").update(expiredToken).digest("hex");
     let testEventId: string | undefined;
@@ -576,8 +580,15 @@ test(
       await pool.query(
         `insert into attorney_tokens (attorney_id, event_id, token_hash, expires_at)
          values ($1, $2, $3, now() + interval '15 minutes'),
-                ($1, $2, $4, now() - interval '1 minute')`,
-        [enrollment.attorneyId, enrollment.eventId, tokenHash, expiredHash]
+                ($1, $2, $4, now() + interval '15 minutes'),
+                ($1, $2, $5, now() - interval '1 minute')`,
+        [
+          enrollment.attorneyId,
+          enrollment.eventId,
+          directHash,
+          fallbackHash,
+          expiredHash,
+        ]
       );
 
       mutableEnvironment.NODE_ENV = "production";
@@ -585,71 +596,113 @@ test(
       mutableEnvironment.NEXT_PUBLIC_APP_URL = "https://counsel-connections.org";
       testCookieValues.clear();
 
-      const callbackUrl = `http://railway.internal:8080/attorney/callback?token=${token}`;
-      const firstGet = await callback.GET(new Request(callbackUrl));
-      const secondGet = await callback.GET(new Request(callbackUrl));
-      assert.equal(firstGet.status, 200);
-      assert.equal(secondGet.status, 200);
-      assert.equal(firstGet.headers.get("cache-control"), "private, no-store, max-age=0");
-      assert.equal(firstGet.headers.get("referrer-policy"), "no-referrer");
-      const contentSecurityPolicy =
-        firstGet.headers.get("content-security-policy") ?? "";
-      const nonceMatch = contentSecurityPolicy.match(
-        /script-src 'nonce-([A-Za-z0-9+/=]+)'/
+      const fallbackUrl = `http://railway.internal:8080/attorney/callback?token=${fallbackToken}`;
+      const scannerGet = await callback.GET(
+        new Request(fallbackUrl, {
+          headers: {
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+            "sec-fetch-site": "cross-site",
+          },
+        })
       );
-      assert.ok(nonceMatch);
-      const html = await firstGet.text();
+      const metadataFreeGet = await callback.GET(new Request(fallbackUrl));
+      assert.equal(scannerGet.status, 200);
+      assert.equal(metadataFreeGet.status, 200);
+      assert.equal(
+        scannerGet.headers.get("cache-control"),
+        "private, no-store, max-age=0"
+      );
+      assert.equal(scannerGet.headers.get("referrer-policy"), "no-referrer");
+      const html = await scannerGet.text();
       assert.match(html, /action="https:\/\/counsel-connections\.org\/attorney\/callback"/);
       assert.match(html, /method="post"/);
-      assert.match(html, /requestSubmit\(\)/);
-      assert.doesNotMatch(html, /<img|<link|src=/i);
-      assert.ok(html.includes(`nonce="${nonceMatch[1]}"`));
+      assert.doesNotMatch(html, /<script|<img|<link|src=/i);
       assert.equal(testCookieValues.has("tmcp_attorney"), false);
-      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
+      assert.equal(await auth.isAttorneyTokenAvailable(fallbackToken), true);
+
+      const userNavigationHeaders = {
+        "sec-fetch-user": "?1",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-dest": "document",
+      };
+      const prefetchGet = await callback.GET(
+        new Request(
+          `http://railway.internal:8080/attorney/callback?token=${directToken}`,
+          {
+            headers: { ...userNavigationHeaders, "sec-purpose": "prefetch" },
+          }
+        )
+      );
+      assert.equal(prefetchGet.status, 200);
+      assert.equal(await auth.isAttorneyTokenAvailable(directToken), true);
+
+      const directGet = await callback.GET(
+        new Request(
+          `http://railway.internal:8080/attorney/callback?token=${directToken}`,
+          { headers: userNavigationHeaders }
+        )
+      );
+      assert.equal(directGet.status, 303);
+      assert.equal(
+        directGet.headers.get("location"),
+        "https://counsel-connections.org/attorney/schedule"
+      );
+      assert.match(
+        testCookieValues.get("tmcp_attorney") ?? "",
+        /^[^.]+\.[A-Za-z0-9_-]+$/
+      );
+      assert.equal(await auth.consumeAttorneyToken(directToken), null);
+
+      testCookieValues.clear();
+      const replayGet = await callback.GET(
+        new Request(
+          `http://railway.internal:8080/attorney/callback?token=${directToken}`,
+          { headers: userNavigationHeaders }
+        )
+      );
+      assert.equal(replayGet.status, 303);
+      assert.equal(
+        replayGet.headers.get("location"),
+        "https://counsel-connections.org/attorney/login?error=invalid"
+      );
+      assert.equal(testCookieValues.has("tmcp_attorney"), false);
 
       const browserHeaders = {
-        origin: "https://counsel-connections.org",
+        origin: "null",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-dest": "document",
         "content-type": "application/x-www-form-urlencoded",
       };
       const foreignPost = await callback.POST(
         new Request("http://railway.internal:8080/attorney/callback", {
           method: "POST",
           headers: { ...browserHeaders, origin: "https://attacker.example" },
-          body: new URLSearchParams({ token }),
+          body: new URLSearchParams({ token: fallbackToken }),
         })
       );
       assert.equal(foreignPost.status, 303);
-      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
+      assert.equal(await auth.isAttorneyTokenAvailable(fallbackToken), true);
 
-      const firstPost = await callback.POST(
+      const fallbackPost = await callback.POST(
         new Request("http://railway.internal:8080/attorney/callback", {
           method: "POST",
           headers: browserHeaders,
-          body: new URLSearchParams({ token }),
+          body: new URLSearchParams({ token: fallbackToken }),
         })
       );
-      assert.equal(firstPost.status, 303);
+      assert.equal(fallbackPost.status, 303);
       assert.equal(
-        firstPost.headers.get("location"),
+        fallbackPost.headers.get("location"),
         "https://counsel-connections.org/attorney/schedule"
       );
-      assert.match(testCookieValues.get("tmcp_attorney") ?? "", /^[^.]+\.[A-Za-z0-9_-]+$/);
+      assert.match(
+        testCookieValues.get("tmcp_attorney") ?? "",
+        /^[^.]+\.[A-Za-z0-9_-]+$/
+      );
+      assert.equal(await auth.consumeAttorneyToken(fallbackToken), null);
 
-      testCookieValues.clear();
-      const replayPost = await callback.POST(
-        new Request("http://railway.internal:8080/attorney/callback", {
-          method: "POST",
-          headers: browserHeaders,
-          body: new URLSearchParams({ token }),
-        })
-      );
-      assert.equal(replayPost.status, 303);
-      assert.equal(
-        replayPost.headers.get("location"),
-        "https://counsel-connections.org/attorney/login?error=invalid"
-      );
-      assert.equal(testCookieValues.has("tmcp_attorney"), false);
-      assert.equal(await auth.consumeAttorneyToken(token), null);
       const expiredGet = await callback.GET(
         new Request(
           `http://railway.internal:8080/attorney/callback?token=${expiredToken}`
@@ -671,7 +724,7 @@ test(
       else mutableEnvironment.NEXT_PUBLIC_APP_URL = previousAppUrl;
       await pool.query(
         `delete from attorney_tokens where token_hash = any($1::text[])`,
-        [[tokenHash, expiredHash]]
+        [[directHash, fallbackHash, expiredHash]]
       );
       if (testEventId) {
         await pool.query(`delete from events where id = $1`, [testEventId]);

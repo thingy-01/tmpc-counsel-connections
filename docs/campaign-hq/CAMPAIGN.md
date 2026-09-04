@@ -66,17 +66,17 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 
 ## Direct attorney magic-link follow-up
 
-- A valid emailed callback opens `/attorney/schedule` automatically without requiring a confirmation click.
-- Callback GET requests now validate without consuming the token, so mail-security previews cannot invalidate a fresh link before the recipient opens it.
-- A nonce-restricted browser script immediately submits the same-origin POST; that POST atomically consumes the token, creates the attorney session, and redirects to the schedule. A manual button appears only when scripts are blocked.
+- Production evidence showed that mail security scanners execute the auto-submit JavaScript from release `98cb813`, consuming four fresh tokens before the recipients reached them. That mitigation is not scanner-safe.
+- The replacement callback redeems GET only when `Sec-Fetch-User: ?1`, navigation mode, and document destination identify a user-activated top-level navigation. Scanner-like, prefetch, and metadata-free GETs remain read-only and return an inert same-origin POST button.
+- Redirecting email wrappers and older browsers may omit the user-activation signal and show the fallback button. A non-browser scanner can synthesize headers, so the signal reduces risk but is not cryptographic proof of a human click.
 - Invalid, expired, and reused tokens still redirect to the public attorney login error page.
 - The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
 - The integrated database callback suite passed 15 of 15 tests. The default suite passed 50 tests with 11 expected database skips. ESLint, strict TypeScript, and the production build passed.
-- Release commit `98cb813fce48d2bccdeef93b611722fc68d2ee5f` contains the scanner-resistant callback correction.
+- The stronger correction is prepared locally and has not been deployed in this worker task.
 
 ## Runtime status
 
-No campaign worker or local QA server remains active. The campaign is complete; production is running the reviewed release and no participant notification has been sent.
+Production remains on the auto-submit release until the root coordinator promotes and validates the stronger callback correction. No participant notification batch has been sent.
 
 ## Historical process note
 
