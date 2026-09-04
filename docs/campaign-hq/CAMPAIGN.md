@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. The latest attorney authentication correction preserves direct schedule entry while preventing mail scanners from consuming one-use links.
+Status: Released to counsel-connections.org on September 3, 2026. A scanner-tolerant attorney authentication correction is prepared locally after production showed that scanner traffic remained indistinguishable from recipient traffic.
 
 ## Release candidate
 
@@ -11,7 +11,7 @@ The integrated release includes:
 - Attorney onboarding fixes and normalized practice-area percentages that preserve legacy values.
 - Previewed, correctable, idempotent roster import with bounded workbook parsing, safe résumé references, and preservation of unmapped optional fields.
 - Company scheduling with event, ownership, conflict, and privacy enforcement plus printable review views.
-- One-time attorney sign-in links, an attorney-only schedule, print support, logout, and replay-safe token handling.
+- Secure 15-minute attorney sign-in links, an attorney-only schedule, print support, logout, and first-redemption audit tracking.
 - Attorney reschedule requests with staff review, private notes, atomic booking moves, and attorney-visible status history.
 - Immutable notification previews, explicit authorization, capture and Resend transports, stable idempotency keys, bounded retries, interrupted-send leases, recipient results, and assignment workbook export.
 - Additive migrations `0001`, `0002`, and `0003` for attorney authentication and Wave 2 data.
@@ -59,24 +59,23 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 
 - Attorney login-request, callback success and error, and logout redirects now use one validated public application origin.
 - Railway's internal `localhost:8080` request origin can no longer appear in these redirect destinations.
-- The callback still reads the one-time token from the incoming request URL before it builds the public response destination.
+- The callback still reads the secure sign-in token from the incoming request URL before it builds the public response destination.
 - CodeRabbit reported no findings. All 60 tests, ESLint, strict TypeScript, and the production build passed.
 - Railway deployment `9ef6a282-20a0-48cd-9668-0cd612b99b05` succeeded for `e0bd209738f4c0b3e85cfc518ce6842bd0b1edef`.
 - Live non-delivering checks returned public `counsel-connections.org` locations for login request, invalid callback, and logout redirects.
 
 ## Direct attorney magic-link follow-up
 
-- Production evidence showed that mail security scanners execute the auto-submit JavaScript from release `98cb813`, consuming four fresh tokens before the recipients reached them. That mitigation is not scanner-safe.
-- The replacement callback redeems GET only when `Sec-Fetch-User: ?1`, navigation mode, and document destination identify a user-activated top-level navigation. Scanner-like, prefetch, and metadata-free GETs remain read-only and return an inert same-origin POST button.
-- Redirecting email wrappers and older browsers may omit the user-activation signal and show the fallback button. A non-browser scanner can synthesize headers, so the signal reduces risk but is not cryptographic proof of a human click.
-- Invalid, expired, and reused tokens still redirect to the public attorney login error page.
+- Production evidence showed that mail security scanners executed the auto-submit JavaScript in `98cb813`, then produced user-like requests after `57181a1`; fresh tokens were consumed before recipients reached them under both designs.
+- The replacement treats each cryptographically random token as a secure bearer link for its fixed 15-minute lifetime. Any valid redemption during that window may establish a session, while `used_at = coalesce(used_at, now())` preserves the first redemption for audit.
+- The callback returns directly to `/attorney/schedule` without a confirmation step or request-header heuristic. Invalid and expired tokens still redirect to the public attorney login error page.
+- This prevents scanner traffic from denying recipient access. Anyone holding the link can replay it during the 15-minute window, so email and login copy describe a secure expiring link rather than a one-time link.
 - The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
-- The integrated database callback suite passed 15 of 15 tests. The default suite passed 50 tests with 11 expected database skips. ESLint, strict TypeScript, and the production build passed.
-- Release commit `57181a1` contains the stronger user-navigation correction.
+- The correction is prepared locally and has not been deployed in this worker task.
 
 ## Runtime status
 
-Production runs the stronger user-navigation callback correction. No participant notification batch has been sent.
+Production remains on the user-navigation callback release until the root coordinator promotes and validates the expiring-link correction. No participant notification batch has been sent.
 
 ## Historical process note
 

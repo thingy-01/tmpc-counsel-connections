@@ -47,7 +47,7 @@ export class ResendEmailTransport implements EmailTransport {
 
     if (!response.ok) {
       // Do not include the provider body: it may contain recipient or message
-      // details, including the one-time link.
+      // details, including the secure sign-in link.
       let retryableConflict = false;
       if (response.status === 409) {
         const body = (await response.json().catch(() => null)) as {

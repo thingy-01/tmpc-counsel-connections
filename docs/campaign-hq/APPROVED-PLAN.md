@@ -41,7 +41,7 @@ Code evidence: the current company schedule only lists existing assignments. Cre
 
 ### 4. Attorney access and notifications
 
-- Add a distinct attorney sign-in and portal. Registered attorneys enter their email, receive a short-lived, single-use magic link, and see only their own current interviews, including dates, times, companies, format/location, and relevant meeting instructions.
+- Add a distinct attorney sign-in and portal. Registered attorneys enter their email, receive a secure 15-minute sign-in link, and see only their own current interviews, including dates, times, companies, format/location, and relevant meeting instructions. The link may be redeemed again before expiry so mail scanners cannot deny the recipient access; `used_at` retains its first-redemption audit timestamp.
 - Keep company invite-code login and staff authentication working alongside the new attorney role.
 - Provide a print-friendly attorney schedule.
 - Add an admin-controlled notification action with a recipient/message preview and send results, so staff can announce schedules without manually composing each attorney's message. Sending to real participants remains a separate authorized action.

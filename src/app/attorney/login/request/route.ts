@@ -52,7 +52,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       await issueAndDeliverAttorneyMagicLink(normalizedEmail);
     } catch (error) {
-      // Never log the submitted address or one-time token. Configuration and
+      // Never log the submitted address or sign-in token. Configuration and
       // provider failures remain server-side and cannot reveal enrollment.
       logAttorneyAuthFailure("delivery", error);
     }

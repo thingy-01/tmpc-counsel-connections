@@ -18,7 +18,7 @@ const TOKEN_BYTES = 32;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MAX_EMAIL_LENGTH = 320;
 
-export type ConsumedAttorneyToken = {
+export type RedeemedAttorneyToken = {
   attorneyId: string;
   eventId: string;
 };
@@ -200,20 +200,20 @@ export async function issueAndDeliverAttorneyMagicLink(
 }
 
 /**
- * Atomically mark a valid token used and return its exact binding. The
- * enrollment EXISTS predicate prevents a deleted or mismatched enrollment
- * from producing a session.
+ * Return the exact binding for a valid, unexpired sign-in token. The first
+ * redemption timestamp is retained as audit evidence while subsequent
+ * redemptions remain valid until expires_at. The enrollment EXISTS predicate
+ * prevents a deleted or mismatched enrollment from producing a session.
  */
-export async function consumeAttorneyToken(
+export async function redeemAttorneyToken(
   token: string
-): Promise<ConsumedAttorneyToken | null> {
+): Promise<RedeemedAttorneyToken | null> {
   if (!TOKEN_PATTERN.test(token)) return null;
   const tokenHash = createHash("sha256").update(token).digest("hex");
-  const result = await db.execute<ConsumedAttorneyToken>(sql`
+  const result = await db.execute<RedeemedAttorneyToken>(sql`
     update "attorney_tokens" as token
-       set "used_at" = now()
+       set "used_at" = coalesce(token."used_at", now())
      where token."token_hash" = ${tokenHash}
-       and token."used_at" is null
        and token."expires_at" > now()
        and exists (
          select 1
@@ -226,26 +226,4 @@ export async function consumeAttorneyToken(
   `);
 
   return result.rows.length === 1 ? result.rows[0] : null;
-}
-
-/** Read-only callback check used before the browser submits the token. */
-export async function isAttorneyTokenAvailable(token: string): Promise<boolean> {
-  if (!TOKEN_PATTERN.test(token)) return false;
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const result = await db.execute<{ available: boolean }>(sql`
-    select exists (
-      select 1
-        from "attorney_tokens" as token
-       where token."token_hash" = ${tokenHash}
-         and token."used_at" is null
-         and token."expires_at" > now()
-         and exists (
-           select 1
-             from "attorneys" as attorney
-            where attorney."id" = token."attorney_id"
-              and attorney."event_id" = token."event_id"
-         )
-    ) as "available"
-  `);
-  return result.rows[0]?.available === true;
 }

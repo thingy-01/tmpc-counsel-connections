@@ -35,11 +35,12 @@ be tested. Finding 1 in that file explains the database driver constraint below.
   so also write the reviewed SQL to a file under `drizzle/`.
 - Bind each token to a specific attorney enrollment **and** event.
 - Tokens are cryptographically random and opaque. Store only a hash. Never log a token.
-- Consume with one conditional statement of the form
-  `UPDATE ... WHERE token_hash = ... AND used_at IS NULL AND expires_at > now() RETURNING ...`
-  and create a session only when exactly one row comes back. Ten simultaneous redemptions
-  of one valid token must yield exactly one session.
-- Lifetime 15 minutes, single use.
+- Redeem with one conditional statement of the form
+  `UPDATE ... SET used_at = coalesce(used_at, now()) WHERE token_hash = ... AND expires_at > now() RETURNING ...`.
+  Create a session only when exactly one row comes back. Concurrent redemptions during
+  the lifetime may create sessions while preserving the first `used_at` value.
+- Lifetime 15 minutes. Reusable only until that fixed expiry so automated mail scanning
+  cannot invalidate the recipient's copy of the link.
 
 ### 2. Rate limiting
 
@@ -136,4 +137,4 @@ Emit JSON matching the supplied output schema. In `blockers`, list required envi
 **key names** and anything you could not verify without a provider account.
 
 ## Root release requirements (must read)
-Production delivery must have a real Resend implementation, not a placeholder as the earlier draft text suggests. It can fail clearly when keys are absent; local capture must be impossible in production. Root is resolving account/sender setup. A single-use token must be consumed atomically under concurrent requests. Rate limiting should survive multiple processes/restarts sufficiently for deployment; unknown email requests must not reveal enrollment. Existing Clerk middleware currently wraps all routes; explicitly account for a truly separate attorney login/callback path while preserving staff protection. Source is Next.js 16.1.6, not version 15 in the boilerplate above.
+Production delivery must have a real Resend implementation, not a placeholder as the earlier draft text suggests. It can fail clearly when keys are absent; local capture must be impossible in production. Root is resolving account/sender setup. A valid token may establish sessions until its fixed 15-minute expiry and must atomically preserve its first-redemption audit timestamp under concurrent requests. Rate limiting should survive multiple processes/restarts sufficiently for deployment; unknown email requests must not reveal enrollment. Existing Clerk middleware currently wraps all routes; explicitly account for a truly separate attorney login/callback path while preserving staff protection. Source is Next.js 16.1.6, not version 15 in the boilerplate above.

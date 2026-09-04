@@ -70,8 +70,8 @@ export async function sendAttorneyMagicLink(
     from,
     to: recipient,
     subject: "Your Counsel Connections sign-in link",
-    text: `Use this link to sign in to Counsel Connections. It expires in 15 minutes and can be used once:\n\n${magicLink}\n\nIf you did not request this link, you can ignore this email.`,
-    html: `<p>Use the link below to sign in to Counsel Connections.</p><p><a href="${safeLink}">Sign in to Counsel Connections</a></p><p>This link expires in 15 minutes and can be used once.</p><p>If you did not request this link, you can ignore this email.</p>`,
+    text: `Use this secure link to sign in to Counsel Connections. It expires in 15 minutes:\n\n${magicLink}\n\nIf you did not request this link, you can ignore this email.`,
+    html: `<p>Use the secure link below to sign in to Counsel Connections.</p><p><a href="${safeLink}">Sign in to Counsel Connections</a></p><p>This link expires in 15 minutes.</p><p>If you did not request this link, you can ignore this email.</p>`,
   };
   await transport.send(message);
 }

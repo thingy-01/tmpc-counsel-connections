@@ -23,7 +23,7 @@ export default async function AttorneyLoginPage({
         </h1>
         <p className="mt-2 text-sm text-slate-600">
           Enter the email address on your attorney registration. We will send a
-          one-time sign-in link if it is enrolled.
+          secure sign-in link if it is enrolled.
         </p>
 
         {sent && (
