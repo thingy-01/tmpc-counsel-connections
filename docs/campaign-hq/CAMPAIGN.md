@@ -71,11 +71,11 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 - The callback returns directly to `/attorney/schedule` without a confirmation step or request-header heuristic. Invalid and expired tokens still redirect to the public attorney login error page.
 - This prevents scanner traffic from denying recipient access. Anyone holding the link can replay it during the 15-minute window, so email and login copy describe a secure expiring link rather than a one-time link.
 - The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
-- The correction is prepared locally and has not been deployed in this worker task.
+- Release commit `5dd5530` contains the expiring-link correction.
 
 ## Runtime status
 
-Production remains on the user-navigation callback release until the root coordinator promotes and validates the expiring-link correction. No participant notification batch has been sent.
+Production runs the expiring-link callback correction. No participant notification batch has been sent.
 
 ## Historical process note
 
