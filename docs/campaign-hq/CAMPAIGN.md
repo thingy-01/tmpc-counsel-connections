@@ -2,7 +2,7 @@
 
 Goal: Implement the approved Granola feedback and release the tested changes to counsel-connections.org while preserving current data.
 
-Status: Released to counsel-connections.org on September 3, 2026. The latest application deployment, `77fc25db-a339-45a7-80fc-baea7a846af5`, successfully promoted commit `e4b054452f6bd1813c74f099d6a730d6b1196fbf` with direct attorney magic-link entry.
+Status: Released to counsel-connections.org on September 3, 2026. The latest attorney authentication correction preserves direct schedule entry while preventing mail scanners from consuming one-use links.
 
 ## Release candidate
 
@@ -66,12 +66,13 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 
 ## Direct attorney magic-link follow-up
 
-- A valid emailed callback now atomically consumes its one-use token, creates the attorney session, and redirects directly to `/attorney/schedule`.
-- The obsolete confirmation page and its POST action were removed after production user feedback.
+- A valid emailed callback opens `/attorney/schedule` automatically without requiring a confirmation click.
+- Callback GET requests now validate without consuming the token, so mail-security previews cannot invalidate a fresh link before the recipient opens it.
+- A nonce-restricted browser script immediately submits the same-origin POST; that POST atomically consumes the token, creates the attorney session, and redirects to the schedule. A manual button appears only when scripts are blocked.
 - Invalid, expired, and reused tokens still redirect to the public attorney login error page.
 - The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
 - The integrated database callback suite passed 15 of 15 tests. The default suite passed 50 tests with 11 expected database skips. ESLint, strict TypeScript, and the production build passed.
-- Railway deployment `77fc25db-a339-45a7-80fc-baea7a846af5` succeeded for `e4b054452f6bd1813c74f099d6a730d6b1196fbf`. A live invalid-token check confirmed the old confirmation page is absent and the public error redirect remains correct.
+- Release commit `98cb813fce48d2bccdeef93b611722fc68d2ee5f` contains the scanner-resistant callback correction.
 
 ## Runtime status
 
