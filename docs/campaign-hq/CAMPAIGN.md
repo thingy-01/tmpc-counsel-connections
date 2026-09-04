@@ -72,11 +72,11 @@ The approved campaign scope is live. Notification batches remain unsent until a 
 - Invalid, expired, and reused tokens still redirect to the public attorney login error page.
 - The callback keeps private no-store and referrer-restriction headers and uses the configured public origin behind Railway.
 - The integrated database callback suite passed 15 of 15 tests. The default suite passed 50 tests with 11 expected database skips. ESLint, strict TypeScript, and the production build passed.
-- The stronger correction is prepared locally and has not been deployed in this worker task.
+- Release commit `57181a1` contains the stronger user-navigation correction.
 
 ## Runtime status
 
-Production remains on the auto-submit release until the root coordinator promotes and validates the stronger callback correction. No participant notification batch has been sent.
+Production runs the stronger user-navigation callback correction. No participant notification batch has been sent.
 
 ## Historical process note
 
