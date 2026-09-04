@@ -227,3 +227,25 @@ export async function consumeAttorneyToken(
 
   return result.rows.length === 1 ? result.rows[0] : null;
 }
+
+/** Read-only callback check used before the browser submits the token. */
+export async function isAttorneyTokenAvailable(token: string): Promise<boolean> {
+  if (!TOKEN_PATTERN.test(token)) return false;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const result = await db.execute<{ available: boolean }>(sql`
+    select exists (
+      select 1
+        from "attorney_tokens" as token
+       where token."token_hash" = ${tokenHash}
+         and token."used_at" is null
+         and token."expires_at" > now()
+         and exists (
+           select 1
+             from "attorneys" as attorney
+            where attorney."id" = token."attorney_id"
+              and attorney."event_id" = token."event_id"
+         )
+    ) as "available"
+  `);
+  return result.rows[0]?.available === true;
+}

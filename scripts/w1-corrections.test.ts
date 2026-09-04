@@ -552,7 +552,7 @@ test(
 );
 
 test(
-  "attorney callback GET consumes once and redirects directly to the public schedule",
+  "scanner GETs preserve an attorney token and browser POST consumes it once",
   { skip: !envFile },
   async () => {
     requireLocalTestDatabase(databaseUrl, { requiredPort: "55432" });
@@ -587,24 +587,79 @@ test(
 
       const callbackUrl = `http://railway.internal:8080/attorney/callback?token=${token}`;
       const firstGet = await callback.GET(new Request(callbackUrl));
-      assert.equal(firstGet.status, 303);
-      assert.equal(
-        firstGet.headers.get("location"),
-        "https://counsel-connections.org/attorney/schedule"
-      );
+      const secondGet = await callback.GET(new Request(callbackUrl));
+      assert.equal(firstGet.status, 200);
+      assert.equal(secondGet.status, 200);
       assert.equal(firstGet.headers.get("cache-control"), "private, no-store, max-age=0");
       assert.equal(firstGet.headers.get("referrer-policy"), "no-referrer");
+      const contentSecurityPolicy =
+        firstGet.headers.get("content-security-policy") ?? "";
+      const nonceMatch = contentSecurityPolicy.match(
+        /script-src 'nonce-([A-Za-z0-9+/=]+)'/
+      );
+      assert.ok(nonceMatch);
+      const html = await firstGet.text();
+      assert.match(html, /action="https:\/\/counsel-connections\.org\/attorney\/callback"/);
+      assert.match(html, /method="post"/);
+      assert.match(html, /requestSubmit\(\)/);
+      assert.doesNotMatch(html, /<img|<link|src=/i);
+      assert.ok(html.includes(`nonce="${nonceMatch[1]}"`));
+      assert.equal(testCookieValues.has("tmcp_attorney"), false);
+      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
+
+      const browserHeaders = {
+        origin: "https://counsel-connections.org",
+        "content-type": "application/x-www-form-urlencoded",
+      };
+      const foreignPost = await callback.POST(
+        new Request("http://railway.internal:8080/attorney/callback", {
+          method: "POST",
+          headers: { ...browserHeaders, origin: "https://attacker.example" },
+          body: new URLSearchParams({ token }),
+        })
+      );
+      assert.equal(foreignPost.status, 303);
+      assert.equal(await auth.isAttorneyTokenAvailable(token), true);
+
+      const firstPost = await callback.POST(
+        new Request("http://railway.internal:8080/attorney/callback", {
+          method: "POST",
+          headers: browserHeaders,
+          body: new URLSearchParams({ token }),
+        })
+      );
+      assert.equal(firstPost.status, 303);
+      assert.equal(
+        firstPost.headers.get("location"),
+        "https://counsel-connections.org/attorney/schedule"
+      );
       assert.match(testCookieValues.get("tmcp_attorney") ?? "", /^[^.]+\.[A-Za-z0-9_-]+$/);
 
       testCookieValues.clear();
-      const secondGet = await callback.GET(new Request(callbackUrl));
-      assert.equal(secondGet.status, 303);
+      const replayPost = await callback.POST(
+        new Request("http://railway.internal:8080/attorney/callback", {
+          method: "POST",
+          headers: browserHeaders,
+          body: new URLSearchParams({ token }),
+        })
+      );
+      assert.equal(replayPost.status, 303);
       assert.equal(
-        secondGet.headers.get("location"),
+        replayPost.headers.get("location"),
         "https://counsel-connections.org/attorney/login?error=invalid"
       );
       assert.equal(testCookieValues.has("tmcp_attorney"), false);
       assert.equal(await auth.consumeAttorneyToken(token), null);
+      const expiredGet = await callback.GET(
+        new Request(
+          `http://railway.internal:8080/attorney/callback?token=${expiredToken}`
+        )
+      );
+      assert.equal(expiredGet.status, 303);
+      assert.equal(
+        expiredGet.headers.get("location"),
+        "https://counsel-connections.org/attorney/login?error=invalid"
+      );
       assert.equal(await auth.consumeAttorneyToken(expiredToken), null);
     } finally {
       testCookieValues.clear();
